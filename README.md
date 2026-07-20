@@ -121,7 +121,7 @@ Sahha allows:
 ---
 ## UML Class Diagram
 
-![UML Class Diagram](docs/class-diagram.png)
+![Class Diagram](ChatGPT%20Image%20Jul%2020,%202026,%2012_08_59%20PM.png)
 
 
 ## Architecture Overview
