@@ -138,3 +138,7 @@ Spring Boot REST API
         |
         v
 PDF Prescription Service
+
+## UML Class Diagram
+
+![UML Class Diagram](docs/ChatGPT%20Image%20Jul%2020,%202026,%2012_08_59%20PM.png)
