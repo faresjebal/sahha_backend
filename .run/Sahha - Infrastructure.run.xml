@@ -1,0 +1,8 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Sahha - Infrastructure" type="CompoundRunConfigurationType">
+    <toRun name="Discovery Server" type="SpringBootApplicationConfigurationType" />
+    <toRun name="Config Server" type="SpringBootApplicationConfigurationType" />
+    <toRun name="API Gateway" type="SpringBootApplicationConfigurationType" />
+    <method v="2" />
+  </configuration>
+</component>

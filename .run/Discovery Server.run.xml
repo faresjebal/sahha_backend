@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Discovery Server" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="discovery-server" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.sahha.discovery.DiscoveryServerApplication" />
+    <option name="SHORTEN_COMMAND_LINE" value="ARGS_FILE" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

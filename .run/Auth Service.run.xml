@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Auth Service" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="auth-service" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.sahha.auth.AuthServiceApplication" />
+    <option name="ACTIVE_PROFILES" value="local" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <option name="SHORTEN_COMMAND_LINE" value="ARGS_FILE" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

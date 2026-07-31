@@ -1,0 +1,17 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Sahha - All Services" type="CompoundRunConfigurationType">
+    <toRun name="Discovery Server" type="SpringBootApplicationConfigurationType" />
+    <toRun name="Config Server" type="SpringBootApplicationConfigurationType" />
+    <toRun name="API Gateway" type="SpringBootApplicationConfigurationType" />
+    <toRun name="Auth Service" type="SpringBootApplicationConfigurationType" />
+    <toRun name="Organisation Service" type="SpringBootApplicationConfigurationType" />
+    <toRun name="Patient Service" type="SpringBootApplicationConfigurationType" />
+    <toRun name="Scheduling Service" type="SpringBootApplicationConfigurationType" />
+    <toRun name="Clinical Service" type="SpringBootApplicationConfigurationType" />
+    <toRun name="Communication Service" type="SpringBootApplicationConfigurationType" />
+    <toRun name="Notification Service" type="SpringBootApplicationConfigurationType" />
+    <toRun name="File Service" type="SpringBootApplicationConfigurationType" />
+    <toRun name="Audit Service" type="SpringBootApplicationConfigurationType" />
+    <method v="2" />
+  </configuration>
+</component>

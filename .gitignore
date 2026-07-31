@@ -1,0 +1,38 @@
+# IDE and operating-system files
+.idea/
+**/.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Java and Maven
+**/target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Frontend dependencies and generated output
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/*.tsbuildinfo
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.mail.example
+!.env.redis.example
+!frontend/.env.example
+
+# Local infrastructure state
+infrastructure/data/
+infrastructure/.state/
+
+# Temporary files
+*.tmp
+*.swp
+*~

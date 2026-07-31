@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Scheduling Service" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="scheduling-service" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.sahha.scheduling.SchedulingServiceApplication" />
+    <option name="ACTIVE_PROFILES" value="local" />
+    <option name="SHORTEN_COMMAND_LINE" value="ARGS_FILE" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

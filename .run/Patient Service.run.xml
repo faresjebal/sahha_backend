@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Patient Service" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="patient-service" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.sahha.patient.PatientServiceApplication" />
+    <option name="ACTIVE_PROFILES" value="local" />
+    <option name="SHORTEN_COMMAND_LINE" value="ARGS_FILE" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

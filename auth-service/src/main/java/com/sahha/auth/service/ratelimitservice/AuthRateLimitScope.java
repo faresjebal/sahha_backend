@@ -1,0 +1,11 @@
+package com.sahha.auth.service.ratelimitservice;
+
+public enum AuthRateLimitScope {
+	LOGIN,
+	REGISTRATION,
+	EMAIL_VERIFICATION_REQUEST,
+	EMAIL_VERIFICATION_CONFIRMATION,
+	PASSWORD_RESET_REQUEST,
+	PASSWORD_RESET_CONFIRMATION,
+	REFRESH
+}
