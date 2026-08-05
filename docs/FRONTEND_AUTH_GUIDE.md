@@ -25,7 +25,7 @@ PostgreSQL and Memurai must be running. Then start, in order:
 
 1. `DiscoveryServerApplication` on `8761`.
 2. `AuthServiceApplication (local)` on `8081`.
-3. `ApiGatewayApplication` on `8080`.
+3. `ApiGatewayApplication` on `8079`.
 4. The React development server:
 
 ```powershell
@@ -40,7 +40,7 @@ The ignored `frontend/.env.local` already selects:
 ```properties
 VITE_USE_MOCKS=true
 VITE_USE_AUTH_MOCKS=false
-VITE_API_BASE_URL=http://localhost:8080/api/v1
+VITE_API_BASE_URL=http://localhost:8079/api/v1
 ```
 
 This means authentication is real while unfinished patient, appointment,
@@ -141,7 +141,7 @@ npm.cmd run smoke:auth
 
 ## Troubleshooting
 
-- “Could not reach API Gateway”: confirm ports `8761`, `8081`, and `8080`, then
+- “Could not reach API Gateway”: confirm ports `8761`, `8081`, and `8079`, then
   restart Vite after changing an environment value.
 - Browser `403`: inspect that the request contains both `XSRF-TOKEN` and
   `X-XSRF-TOKEN`; reload once to bootstrap a fresh pair.

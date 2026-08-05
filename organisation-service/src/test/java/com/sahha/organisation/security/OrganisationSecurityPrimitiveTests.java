@@ -94,6 +94,7 @@ class OrganisationSecurityPrimitiveTests {
 				.claim("sid", sessionId)
 				.claim("cv", credentialVersion)
 				.claim("roles", roles)
+				.claim("org_roles", List.of())
 				.claim("token_type", tokenType)
 				.build();
 	}

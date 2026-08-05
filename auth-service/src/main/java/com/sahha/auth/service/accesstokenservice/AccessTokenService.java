@@ -13,6 +13,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
 import com.sahha.auth.config.AuthJwtProperties;
+import com.sahha.auth.entity.UserSession;
 import com.sahha.auth.security.RsaKeyMaterial;
 import com.sahha.auth.security.SessionBoundJwtValidator;
 import com.sahha.auth.service.usersessionservice.IssuedSessionCredentials;
@@ -40,6 +41,47 @@ public class AccessTokenService {
 		IssuedSessionCredentials requiredSession = Objects.requireNonNull(
 				session,
 				"session must not be null");
+		return issue(
+				requiredSession.getUserId(),
+				requiredSession.getSessionId(),
+				requiredSession.getCredentialVersion(),
+				requiredSession.getActiveOrganisationId(),
+				requiredSession.getActiveOrganisationRoles(),
+				requiredSession.getIdleExpiresAt(),
+				requiredSession.getAbsoluteExpiresAt(),
+				platformRoles,
+				issuedAt);
+	}
+
+	public IssuedAccessToken issue(
+			UserSession session,
+			List<String> platformRoles,
+			Instant issuedAt) {
+		UserSession requiredSession = Objects.requireNonNull(
+				session,
+				"session must not be null");
+		return issue(
+				requiredSession.getUser().getId(),
+				requiredSession.getId(),
+				requiredSession.getCredentialVersionAtCreation(),
+				requiredSession.getActiveOrganisationId(),
+				requiredSession.getActiveOrganisationRoles(),
+				requiredSession.getIdleExpiresAt(),
+				requiredSession.getAbsoluteExpiresAt(),
+				platformRoles,
+				issuedAt);
+	}
+
+	private IssuedAccessToken issue(
+			UUID userId,
+			UUID sessionId,
+			int credentialVersion,
+			UUID activeOrganisationId,
+			List<String> activeOrganisationRoles,
+			Instant idleExpiresAt,
+			Instant absoluteExpiresAt,
+			List<String> platformRoles,
+			Instant issuedAt) {
 		Instant requiredIssuedAt = Objects.requireNonNull(
 				issuedAt,
 				"issuedAt must not be null");
@@ -47,10 +89,19 @@ public class AccessTokenService {
 				Objects.requireNonNull(
 						platformRoles,
 						"platformRoles must not be null"));
+		List<String> requiredOrganisationRoles = List.copyOf(
+				Objects.requireNonNull(
+						activeOrganisationRoles,
+						"activeOrganisationRoles must not be null"));
+		if ((activeOrganisationId == null)
+				!= requiredOrganisationRoles.isEmpty()) {
+			throw new IllegalArgumentException(
+					"active organisation and roles must be present together");
+		}
 		Instant expiresAt = earliest(
 				requiredIssuedAt.plus(properties.accessTokenLifetime()),
-				requiredSession.getIdleExpiresAt(),
-				requiredSession.getAbsoluteExpiresAt());
+				idleExpiresAt,
+				absoluteExpiresAt);
 		if (!expiresAt.isAfter(requiredIssuedAt)) {
 			throw new IllegalStateException(
 					"the session cannot receive a new access token");
@@ -61,27 +112,35 @@ public class AccessTokenService {
 				.keyId(keyMaterial.keyId())
 				.type("JWT")
 				.build();
-		JwtClaimsSet claims = JwtClaimsSet.builder()
+		JwtClaimsSet.Builder claimsBuilder = JwtClaimsSet.builder()
 				.id(UUID.randomUUID().toString())
 				.issuer(properties.issuer())
 				.audience(List.of(properties.audience()))
-				.subject(requiredSession.getUserId().toString())
+				.subject(userId.toString())
 				.issuedAt(requiredIssuedAt)
 				.notBefore(requiredIssuedAt)
 				.expiresAt(expiresAt)
 				.claim(
 						SessionBoundJwtValidator.SESSION_ID_CLAIM,
-						requiredSession.getSessionId().toString())
+						sessionId.toString())
 				.claim(
 						SessionBoundJwtValidator.CREDENTIAL_VERSION_CLAIM,
-						requiredSession.getCredentialVersion())
+						credentialVersion)
 				.claim(
 						SessionBoundJwtValidator.PLATFORM_ROLES_CLAIM,
 						requiredRoles)
 				.claim(
+						SessionBoundJwtValidator.ORGANISATION_ROLES_CLAIM,
+						requiredOrganisationRoles)
+				.claim(
 						SessionBoundJwtValidator.TOKEN_TYPE_CLAIM,
-						SessionBoundJwtValidator.ACCESS_TOKEN_TYPE)
-				.build();
+						SessionBoundJwtValidator.ACCESS_TOKEN_TYPE);
+		if (activeOrganisationId != null) {
+			claimsBuilder.claim(
+					SessionBoundJwtValidator.ACTIVE_ORGANISATION_ID_CLAIM,
+					activeOrganisationId.toString());
+		}
+		JwtClaimsSet claims = claimsBuilder.build();
 		String encoded = jwtEncoder.encode(
 				JwtEncoderParameters.from(header, claims))
 				.getTokenValue();

@@ -237,6 +237,7 @@ class RedisSessionCacheIntegrationTests {
 				status,
 				1,
 				null,
+				java.util.List.of(),
 				idleExpiresAt,
 				absoluteExpiresAt,
 				version);

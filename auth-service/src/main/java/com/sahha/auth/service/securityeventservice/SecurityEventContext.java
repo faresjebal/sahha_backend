@@ -7,12 +7,14 @@ public record SecurityEventContext(
 		UUID subjectUserId,
 		String attemptedEmail,
 		UUID sessionId,
+		UUID activeOrganisationId,
 		String ipAddress,
 		String userAgent) {
 
 	public static SecurityEventContext account(UUID userId) {
 		return new SecurityEventContext(
 				userId,
+				null,
 				null,
 				null,
 				null,
@@ -29,6 +31,7 @@ public record SecurityEventContext(
 				null,
 				sessionId,
 				null,
+				null,
 				null);
 	}
 
@@ -43,6 +46,7 @@ public record SecurityEventContext(
 				null,
 				attemptedEmail,
 				sessionId,
+				null,
 				ipAddress,
 				userAgent);
 	}
@@ -55,6 +59,21 @@ public record SecurityEventContext(
 				subjectUserId,
 				null,
 				null,
+				null,
+				null,
+				null);
+	}
+
+	public static SecurityEventContext organisationSelection(
+			UUID userId,
+			UUID sessionId,
+			UUID activeOrganisationId) {
+		return new SecurityEventContext(
+				userId,
+				null,
+				null,
+				sessionId,
+				activeOrganisationId,
 				null,
 				null);
 	}

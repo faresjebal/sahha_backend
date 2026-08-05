@@ -20,6 +20,7 @@ public class SecurityEventMapper {
 				event.getResult().name(),
 				event.getReasonCode(),
 				event.getSessionId(),
+				event.getActiveOrganisationId(),
 				event.getRequestId(),
 				event.getIpAddress(),
 				event.getUserAgent(),
@@ -37,6 +38,7 @@ public class SecurityEventMapper {
 		put(payload, "result", message.result());
 		put(payload, "reasonCode", message.reasonCode());
 		put(payload, "sessionId", message.sessionId());
+		put(payload, "activeOrganisationId", message.activeOrganisationId());
 		put(payload, "requestId", message.requestId());
 		put(payload, "ipAddress", message.ipAddress());
 		put(payload, "userAgent", message.userAgent());

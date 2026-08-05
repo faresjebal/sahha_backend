@@ -100,6 +100,7 @@ class CachedUserSessionTests {
 				status,
 				4,
 				null,
+				java.util.List.of(),
 				idleExpiresAt,
 				absoluteExpiresAt,
 				2);

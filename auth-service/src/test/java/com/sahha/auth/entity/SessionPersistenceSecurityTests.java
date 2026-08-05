@@ -66,7 +66,6 @@ class SessionPersistenceSecurityTests {
 				IllegalArgumentException.class,
 				() -> UserSession.open(
 						user,
-						null,
 						"raw-device-id",
 						"My laptop",
 						"Synthetic browser",
@@ -108,7 +107,6 @@ class SessionPersistenceSecurityTests {
 	private UserSession session(UserAccount user) {
 		return UserSession.open(
 				user,
-				null,
 				"a".repeat(64),
 				"My laptop",
 				"Synthetic browser",

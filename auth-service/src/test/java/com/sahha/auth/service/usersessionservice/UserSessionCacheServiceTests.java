@@ -87,7 +87,7 @@ class UserSessionCacheServiceTests {
 
 	@Test
 	void staleSchemaIsEvictedAndCannotAuthorise() {
-		CachedUserSession stale = projection(2);
+		CachedUserSession stale = projection(1);
 		when(cacheStore.find(stale.sessionId()))
 				.thenReturn(Optional.of(stale));
 		when(sessionRepository.findByIdWithUser(stale.sessionId()))
@@ -135,7 +135,6 @@ class UserSessionCacheServiceTests {
 				null);
 		return UserSession.open(
 				user,
-				null,
 				"a".repeat(64),
 				"Laptop",
 				"Synthetic browser",
@@ -153,6 +152,7 @@ class UserSessionCacheServiceTests {
 				SessionStatus.ACTIVE,
 				1,
 				null,
+				java.util.List.of(),
 				NOW.plusSeconds(60),
 				NOW.plusSeconds(120),
 				1);

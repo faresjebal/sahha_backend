@@ -2,8 +2,10 @@ package com.sahha.auth.security;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -22,6 +24,8 @@ public class SessionBoundJwtValidator implements OAuth2TokenValidator<Jwt> {
 	public static final String SESSION_ID_CLAIM = "sid";
 	public static final String CREDENTIAL_VERSION_CLAIM = "cv";
 	public static final String PLATFORM_ROLES_CLAIM = "roles";
+	public static final String ACTIVE_ORGANISATION_ID_CLAIM = "org_id";
+	public static final String ORGANISATION_ROLES_CLAIM = "org_roles";
 	public static final String TOKEN_TYPE_CLAIM = "token_type";
 	public static final String ACCESS_TOKEN_TYPE = "access";
 
@@ -29,6 +33,8 @@ public class SessionBoundJwtValidator implements OAuth2TokenValidator<Jwt> {
 			"invalid_token",
 			"The access token is invalid.",
 			null);
+	private static final Pattern ROLE_CODE =
+			Pattern.compile("^[A-Z][A-Z0-9_]{1,63}$");
 
 	private final UserSessionCacheService sessionCacheService;
 	private final Clock clock;
@@ -56,11 +62,35 @@ public class SessionBoundJwtValidator implements OAuth2TokenValidator<Jwt> {
 					|| credentialVersion.intValue() < 1) {
 				return failure();
 			}
+			String organisationIdClaim = token.getClaimAsString(
+					ACTIVE_ORGANISATION_ID_CLAIM);
+			UUID activeOrganisationId = organisationIdClaim == null
+					? null
+					: UUID.fromString(organisationIdClaim);
+			Object roleClaim = token.getClaims().get(ORGANISATION_ROLES_CLAIM);
+			if (!(roleClaim instanceof Collection<?> values)
+					|| values.stream().anyMatch(value ->
+							!(value instanceof String role)
+									|| !ROLE_CODE.matcher(role).matches())) {
+				return failure();
+			}
+			List<String> organisationRoles = values.stream()
+					.map(String.class::cast)
+					.distinct()
+					.sorted()
+					.toList();
+			if (organisationRoles.size() != values.size()
+					|| (activeOrganisationId == null)
+							!= organisationRoles.isEmpty()) {
+				return failure();
+			}
 			Instant observedAt = clock.instant();
-			return sessionCacheService.isActive(
+			return sessionCacheService.isActiveForContext(
 					sessionId,
 					userId,
 					credentialVersion.intValue(),
+					activeOrganisationId,
+					organisationRoles,
 					observedAt)
 					? OAuth2TokenValidatorResult.success()
 					: failure();

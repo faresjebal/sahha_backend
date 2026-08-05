@@ -72,11 +72,17 @@ class OpenApiDocumentationTests {
 						"$.paths['/api/v1/auth/session'].get.operationId")
 						.value("getCurrentSession"))
 				.andExpect(jsonPath(
+						"$.paths['/api/v1/auth/account'].get.operationId")
+						.value("getCurrentAccount"))
+				.andExpect(jsonPath(
 						"$.paths['/api/v1/auth/sessions/{sessionId}'].delete.operationId")
 						.value("revokeOwnedSession"))
 				.andExpect(jsonPath(
 						"$.paths['/api/v1/auth/password-change'].post.operationId")
 						.value("changePassword"))
+				.andExpect(jsonPath(
+						"$.paths['/api/v1/auth/platform/accounts'].get.operationId")
+						.value("findPlatformAccountByEmail"))
 				.andExpect(jsonPath(
 						"$.paths['/api/v1/auth/platform/accounts/{userId}/status'].put.operationId")
 						.value("updateAccountStatus"))

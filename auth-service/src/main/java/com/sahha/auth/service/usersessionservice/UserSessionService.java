@@ -103,7 +103,6 @@ public class UserSessionService {
 				securityProperties.sessionIdleLifetime());
 		UserSession session = UserSession.open(
 				user,
-				null,
 				deviceIdHash,
 				deviceName,
 				userAgent,

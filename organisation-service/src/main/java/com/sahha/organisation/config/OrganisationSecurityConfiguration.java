@@ -9,6 +9,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -114,6 +115,25 @@ public class OrganisationSecurityConfiguration {
 						.permitAll()
 						.requestMatchers("/api/v1/platform/organisations/**")
 						.hasRole("PLATFORM_ADMIN")
+						.requestMatchers(
+								HttpMethod.GET,
+								"/api/v1/organisations/memberships",
+								"/api/v1/organisations/*/membership-context")
+						.authenticated()
+						.requestMatchers("/api/v1/departments/**")
+						.hasRole("ORGANIZATION_ADMIN")
+						.requestMatchers("/api/v1/staff-invitations/**")
+						.hasRole("ORGANIZATION_ADMIN")
+						.requestMatchers(
+								"/api/v1/staff",
+								"/api/v1/staff/**")
+						.hasRole("ORGANIZATION_ADMIN")
+						.requestMatchers(
+								"/api/v1/my/doctor-profile",
+								"/api/v1/my/doctor-profile/**")
+						.hasRole("DOCTOR")
+						.requestMatchers("/api/v1/my/staff-invitations/**")
+						.authenticated()
 						.anyRequest()
 						.denyAll())
 				.csrf(csrf -> csrf

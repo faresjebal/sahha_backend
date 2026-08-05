@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.sahha.auth.dto.request.AccountAdministrationAction;
+import com.sahha.auth.dto.response.PlatformAccountResponse;
 import com.sahha.auth.entity.PlatformRoleCode;
 import com.sahha.auth.entity.UserAccount;
 import com.sahha.auth.entity.SecurityEventResult;
@@ -27,16 +28,33 @@ public class AccountAdministrationService {
 	private final UserPlatformRoleRepository roleRepository;
 	private final UserSessionService sessionService;
 	private final SecurityEventRecorder securityEventRecorder;
+	private final EmailNormalizer emailNormalizer;
 
 	public AccountAdministrationService(
 			UserAccountRepository userRepository,
 			UserPlatformRoleRepository roleRepository,
 			UserSessionService sessionService,
-			SecurityEventRecorder securityEventRecorder) {
+			SecurityEventRecorder securityEventRecorder,
+			EmailNormalizer emailNormalizer) {
 		this.userRepository = userRepository;
 		this.roleRepository = roleRepository;
 		this.sessionService = sessionService;
 		this.securityEventRecorder = securityEventRecorder;
+		this.emailNormalizer = emailNormalizer;
+	}
+
+	@Transactional(readOnly = true)
+	public PlatformAccountResponse findByEmail(String email) {
+		UserAccount account = userRepository.findByNormalizedEmail(
+				emailNormalizer.normalize(email))
+				.orElseThrow(OwnedSessionNotFoundException::new);
+		return new PlatformAccountResponse(
+				account.getId(),
+				account.getEmail(),
+				account.getFirstName(),
+				account.getLastName(),
+				account.getStatus(),
+				account.getEmailVerifiedAt() != null);
 	}
 
 	@Transactional

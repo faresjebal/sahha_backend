@@ -77,6 +77,223 @@ public class OrganisationProblemDetailsHandler {
 						request));
 	}
 
+	@ExceptionHandler(DepartmentNotFoundException.class)
+	ResponseEntity<ProblemDetail> departmentNotFound(
+			DepartmentNotFoundException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.NOT_FOUND,
+				problem(
+						HttpStatus.NOT_FOUND,
+						"Department not found",
+						"The requested department was not found in the active organisation.",
+						"urn:sahha:problem:department-not-found",
+						request));
+	}
+
+	@ExceptionHandler(StaffInvitationNotFoundException.class)
+	ResponseEntity<ProblemDetail> staffInvitationNotFound(
+			StaffInvitationNotFoundException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.NOT_FOUND,
+				problem(
+						HttpStatus.NOT_FOUND,
+						"Staff invitation not found",
+						"The requested staff invitation was not found or is not available to this account.",
+						"urn:sahha:problem:staff-invitation-not-found",
+						request));
+	}
+
+	@ExceptionHandler(StaffMemberNotFoundException.class)
+	ResponseEntity<ProblemDetail> staffMemberNotFound(
+			StaffMemberNotFoundException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.NOT_FOUND,
+				problem(
+						HttpStatus.NOT_FOUND,
+						"Staff member not found",
+						"The requested staff member was not found in the active organisation.",
+						"urn:sahha:problem:staff-member-not-found",
+						request));
+	}
+
+	@ExceptionHandler(StaffDepartmentAssignmentNotFoundException.class)
+	ResponseEntity<ProblemDetail> staffAssignmentNotFound(
+			StaffDepartmentAssignmentNotFoundException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.NOT_FOUND,
+				problem(
+						HttpStatus.NOT_FOUND,
+						"Department assignment not found",
+						"The requested department assignment was not found in the active organisation.",
+						"urn:sahha:problem:staff-department-assignment-not-found",
+						request));
+	}
+
+	@ExceptionHandler(DoctorProfileNotFoundException.class)
+	ResponseEntity<ProblemDetail> doctorProfileNotFound(
+			DoctorProfileNotFoundException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.NOT_FOUND,
+				problem(
+						HttpStatus.NOT_FOUND,
+						"Doctor profile not found",
+						"The professional profile has not been created in the active organisation.",
+						"urn:sahha:problem:doctor-profile-not-found",
+						request));
+	}
+
+	@ExceptionHandler(OrganisationAccessDeniedException.class)
+	ResponseEntity<ProblemDetail> organisationAccessDenied(
+			OrganisationAccessDeniedException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.FORBIDDEN,
+				problem(
+						HttpStatus.FORBIDDEN,
+						"Organisation access denied",
+						"The active organisation context does not permit this operation.",
+						"urn:sahha:problem:organisation-access-denied",
+						request));
+	}
+
+	@ExceptionHandler(DepartmentConflictException.class)
+	ResponseEntity<ProblemDetail> departmentConflict(
+			DepartmentConflictException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.CONFLICT,
+				problem(
+						HttpStatus.CONFLICT,
+						"Department conflict",
+						"A department with the same name or code already exists in this organisation.",
+						"urn:sahha:problem:department-conflict",
+						request));
+	}
+
+	@ExceptionHandler(ConcurrentDepartmentModificationException.class)
+	ResponseEntity<ProblemDetail> concurrentDepartmentModification(
+			ConcurrentDepartmentModificationException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.CONFLICT,
+				problem(
+						HttpStatus.CONFLICT,
+						"Department changed",
+						"The department changed since it was loaded. Refresh and try again.",
+						"urn:sahha:problem:concurrent-department-modification",
+						request));
+	}
+
+	@ExceptionHandler(ConcurrentStaffInvitationModificationException.class)
+	ResponseEntity<ProblemDetail> concurrentStaffInvitationModification(
+			ConcurrentStaffInvitationModificationException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.CONFLICT,
+				problem(
+						HttpStatus.CONFLICT,
+						"Staff invitation changed",
+						"The staff invitation changed since it was loaded. Refresh and try again.",
+						"urn:sahha:problem:concurrent-staff-invitation-modification",
+						request));
+	}
+
+	@ExceptionHandler(StaffInvitationConflictException.class)
+	ResponseEntity<ProblemDetail> staffInvitationConflict(
+			StaffInvitationConflictException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.CONFLICT,
+				problem(
+						HttpStatus.CONFLICT,
+						"Staff invitation conflict",
+						"The invitation is expired, already resolved, duplicated, or conflicts with an existing membership.",
+						"urn:sahha:problem:staff-invitation-conflict",
+						request));
+	}
+
+	@ExceptionHandler(ConcurrentStaffResourceModificationException.class)
+	ResponseEntity<ProblemDetail> concurrentStaffResourceModification(
+			ConcurrentStaffResourceModificationException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.CONFLICT,
+				problem(
+						HttpStatus.CONFLICT,
+						"Staff resource changed",
+						"The staff resource changed since it was loaded. Refresh and try again.",
+						"urn:sahha:problem:concurrent-staff-resource-modification",
+						request));
+	}
+
+	@ExceptionHandler(StaffManagementConflictException.class)
+	ResponseEntity<ProblemDetail> staffManagementConflict(
+			StaffManagementConflictException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.CONFLICT,
+				problem(
+						HttpStatus.CONFLICT,
+						"Staff management conflict",
+						"The requested lifecycle, department, role, or professional-profile change conflicts with current organisation state.",
+						"urn:sahha:problem:staff-management-conflict",
+						request));
+	}
+
+	@ExceptionHandler({
+		OrganisationContextNotFoundException.class,
+		OrganisationMembershipNotFoundException.class,
+		EligibleAccountNotFoundException.class
+	})
+	ResponseEntity<ProblemDetail> membershipTargetNotFound(
+			RuntimeException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.NOT_FOUND,
+				problem(
+						HttpStatus.NOT_FOUND,
+						"Membership resource not found",
+						"The requested membership resource or eligible account was not found.",
+						"urn:sahha:problem:membership-resource-not-found",
+						request));
+	}
+
+	@ExceptionHandler({
+		OrganisationMembershipConflictException.class,
+		AccountNotEligibleException.class
+	})
+	ResponseEntity<ProblemDetail> membershipConflict(
+			RuntimeException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.CONFLICT,
+				problem(
+						HttpStatus.CONFLICT,
+						"Membership conflict",
+						"The account is not eligible or already has a membership in this organisation.",
+						"urn:sahha:problem:membership-conflict",
+						request));
+	}
+
+	@ExceptionHandler(AuthAccountDirectoryUnavailableException.class)
+	ResponseEntity<ProblemDetail> authDirectoryUnavailable(
+			AuthAccountDirectoryUnavailableException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.SERVICE_UNAVAILABLE,
+				problem(
+						HttpStatus.SERVICE_UNAVAILABLE,
+						"Identity directory unavailable",
+						"The identity could not be verified at this time. Try again later.",
+						"urn:sahha:problem:identity-directory-unavailable",
+						request));
+	}
+
 	@ExceptionHandler(IllegalArgumentException.class)
 	ResponseEntity<ProblemDetail> invalidRequest(
 			IllegalArgumentException exception,

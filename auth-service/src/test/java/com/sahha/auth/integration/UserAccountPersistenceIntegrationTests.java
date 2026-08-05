@@ -62,7 +62,7 @@ class UserAccountPersistenceIntegrationTests {
 
 		assertEquals("user_account", tableName);
 		assertNotNull(flyway.info().current());
-		assertEquals("6", flyway.info().current().getVersion().getVersion());
+		assertEquals("7", flyway.info().current().getVersion().getVersion());
 	}
 
 	@Test

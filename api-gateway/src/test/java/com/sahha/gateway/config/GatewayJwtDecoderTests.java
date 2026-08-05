@@ -178,6 +178,7 @@ class GatewayJwtDecoderTests {
 				.claim("sid", UUID.randomUUID().toString())
 				.claim("cv", 1)
 				.claim("roles", List.of("PLATFORM_ADMIN"))
+				.claim("org_roles", List.of())
 				.claim("token_type", tokenType)
 				.build();
 		SignedJWT signed = new SignedJWT(

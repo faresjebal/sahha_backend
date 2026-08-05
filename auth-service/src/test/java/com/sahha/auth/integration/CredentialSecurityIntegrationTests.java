@@ -83,7 +83,7 @@ class CredentialSecurityIntegrationTests {
 
 		assertEquals("verification_token", tableName);
 		assertNotNull(flyway.info().current());
-		assertEquals("6", flyway.info().current().getVersion().getVersion());
+		assertEquals("7", flyway.info().current().getVersion().getVersion());
 	}
 
 	@Test

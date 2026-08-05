@@ -1,10 +1,10 @@
 # Auth Service Swagger test guide
 
-Last updated: 2026-07-30
+Last updated: 2026-08-01
 
 ## What is implemented
 
-Swagger documents fifteen Auth operations:
+Swagger documents sixteen Auth operations:
 
 | Method | Path | Success |
 | --- | --- | ---: |
@@ -15,6 +15,7 @@ Swagger documents fifteen Auth operations:
 | `POST` | `/api/v1/auth/password-resets/request` | `202` |
 | `POST` | `/api/v1/auth/password-resets/confirm` | `204` |
 | `POST` | `/api/v1/auth/login` | `200` |
+| `POST` | `/api/v1/auth/active-organisation` | `200` |
 | `POST` | `/api/v1/auth/refresh` | `200` |
 | `POST` | `/api/v1/auth/logout` | `204` |
 | `POST` | `/api/v1/auth/logout-all` | `204` |
@@ -60,7 +61,7 @@ Open:
 
 Health should be `UP`. Swagger remains served directly by Auth as an isolated
 service diagnostic. The React application and full browser workflow use
-Gateway on `http://localhost:8080`; see `docs/GATEWAY_AUTH_GUIDE.md`.
+Gateway on `http://localhost:8079`; see `docs/GATEWAY_AUTH_GUIDE.md`.
 
 ## 2. Set the Swagger CSRF header
 
@@ -148,7 +149,32 @@ secure cookies.
 Call `GET /api/v1/auth/csrf` and update Swagger's `csrfHeader` before the next
 POST.
 
-## 5. Test session management
+## 5. Test active-organisation selection
+
+This operation also requires Discovery and Organisation Service to be running,
+and the signed-in account must already have an active organisation membership.
+Use [the Organisation Swagger guide](./ORGANISATION_SWAGGER_GUIDE.md) to create
+the organisation and assign its administrator first.
+
+1. Start Organisation Service with the `local` profile.
+2. Execute `GET /api/v1/organisations/memberships` in Organisation Swagger and
+   copy one returned `organisationId`.
+3. Refresh Auth's CSRF value and execute
+   `POST /api/v1/auth/active-organisation`:
+
+   ```json
+   {
+     "organisationId": "replace-with-an-active-membership-organisation-id"
+   }
+   ```
+
+Expect `200` with the selected `activeOrganisationId` and only the active roles
+for that membership. Auth replaces only the access cookie and CSRF token; it
+does not create a session, rotate the refresh token, or merge roles from other
+organisations. A missing, suspended, unrelated, or role-less membership is
+rejected safely.
+
+## 6. Test session management
 
 Execute `GET /api/v1/auth/session` first. Expect `200` with the current user
 ID, session ID, access-token expiry, and global platform roles. This endpoint
@@ -173,7 +199,7 @@ To revoke one device:
 Expect `204`. Revoking another account's session returns a generic `404`.
 Revoking the current session also clears the browser authentication cookies.
 
-## 6. Test authenticated password change
+## 7. Test authenticated password change
 
 Execute `POST /api/v1/auth/password-change`:
 
@@ -189,7 +215,7 @@ advances the credential version, revokes every active session, and clears the
 current browser's authentication cookies. All earlier access and refresh
 credentials must then be rejected.
 
-## 7. Test refresh and logout
+## 8. Test refresh and logout
 
 Execute `POST /api/v1/auth/refresh` with no body. Expect `200`. Auth atomically
 consumes the refresh credential and replaces both authentication cookies.
@@ -205,7 +231,7 @@ After logout, the access and refresh cookies are cleared. A request that
 requires `cookieAuth` returns generic `401` without exposing why the session is
 invalid.
 
-## 8. Test password reset
+## 9. Test password reset
 
 Execute `POST /api/v1/auth/password-resets/request`:
 
@@ -229,7 +255,7 @@ Expect `204`. It consumes the reset token, increments the credential version,
 and revokes existing sessions. A later protected request with an old access
 cookie must be rejected.
 
-## 9. Test platform account administration
+## 10. Test platform account administration
 
 This endpoint requires a verified active account with a persisted
 `PLATFORM_ADMIN` assignment. A signed role claim alone is not sufficient, and
@@ -250,7 +276,7 @@ a valid transition. Suspension and disablement revoke all target sessions;
 reactivation applies only to a verified suspended account. A platform
 administrator cannot target their own account through this endpoint.
 
-## 10. Useful negative checks
+## 11. Useful negative checks
 
 - Omit `X-XSRF-TOKEN` from an unsafe request: expect safe `403`.
 - Use an unknown email or wrong password at login: both return the same `401`.
@@ -267,18 +293,19 @@ administrator cannot target their own account through this endpoint.
 Responses carry `X-Request-Id`. Passwords, raw tokens, cookie values, and
 account-existence details must not appear in response bodies or logs.
 
-## 11. Automated verification
+## 12. Automated verification
 
 ```powershell
 .\mvnw.cmd -pl auth-service test
 .\mvnw.cmd test
 ```
 
-Verified result on 2026-07-30:
+Verified result on 2026-08-01:
 
-- Auth: 112 tests, 0 failures, 0 errors, 0 skipped.
-- Gateway: 16 tests, 0 failures, 0 errors, 0 skipped.
-- Complete 13-project reactor: 138 tests, 0 failures, 0 errors, 0 skipped.
+- Auth: 115 tests, 0 failures, 0 errors, 0 skipped.
+- Organisation: 22 tests, 0 failures, 0 errors, 0 skipped.
+- Gateway: 19 tests, 0 failures, 0 errors, 0 skipped.
+- Frontend: 27 tests plus TypeScript typecheck and production build, all passed.
 
 The Redis integration test uses native Memurai at `localhost:6379` and removes
 only `sahha:auth:session:v1:*` keys before and after each test. Its outage test

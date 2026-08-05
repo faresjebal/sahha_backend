@@ -1,6 +1,6 @@
 # Auth Service implementation plan
 
-Last updated: 2026-07-30
+Last updated: 2026-08-01
 
 ## 1. Objective
 
@@ -32,7 +32,8 @@ Completed foundation:
 - Auth local and test profiles connect to separately credentialed PostgreSQL
   databases.
 - `V1__create_user_accounts.sql` through
-  `V6__index_session_retention.sql` are applied and validated.
+  `V7__add_active_organisation_context.sql` are applied and validated in the
+  integration-test database.
 - `UserAccount`, `AccountStatus`, repository, and email normalization are
   implemented.
 - `UserAccount` uses Lombok for read-only getters, its protected JPA
@@ -96,7 +97,7 @@ Completed foundation:
 - Redis writes occur only after PostgreSQL commit and use an atomic
   version-aware Lua update. Cache misses, malformed values, disabled caching,
   and Redis outages fall back to PostgreSQL.
-- Auth OpenAPI/Swagger documents all fifteen implemented account and browser-session
+- Auth OpenAPI/Swagger documents all sixteen implemented account and browser-session
   HTTP operations, including their CSRF requirements, provides synthetic
   examples and safe error contracts, and can be disabled with
   `AUTH_OPENAPI_ENABLED=false`.
@@ -105,12 +106,11 @@ Completed foundation:
   event. The conditional Kafka publisher marks rows published only after
   acknowledgement and retains failed rows with bounded retry backoff.
 - A guarded integration suite rebuilds only `sahha_auth_test`.
-- One hundred twelve Auth tests and the 138-test complete backend reactor pass with no
-  failures, errors, or skips.
+- One hundred fifteen Auth tests pass with no failures, errors, or skips.
 
-Current next task: model Organisation Service memberships and roles plus the
-active-organisation selection contract, without moving resource-level
-authorisation into Auth or Gateway.
+Current next task: consume the completed active context in Organisation
+Service department management, keeping resource-level authorisation out of
+Auth and Gateway.
 
 ## 2. Service boundary
 
@@ -179,7 +179,8 @@ Required fields:
 - `id`: UUID and token-family identifier.
 - `user_id`.
 - `status`: `ACTIVE`, `REVOKED`, `EXPIRED`, or `COMPROMISED`.
-- Optional `active_organisation_id` as a validated context snapshot; no
+- Optional `active_organisation_id` and its non-empty canonical
+  `active_organisation_roles` snapshot as one validated context pair; no
   cross-database foreign key.
 - `device_id_hash` and optional untrusted display `device_name`.
 - Bounded `user_agent`, `initial_ip`, and `last_ip`.
@@ -597,16 +598,20 @@ errors, or skips. Memurai returns `PONG`, is capped at 256 MB with
 - [x] Route Auth and JWKS through discovery-aware Gateway routes and validate
       RS256 access cookies there with issuer, audience, access-token type,
       session ID, credential version, and global-role checks.
-- [ ] Add active-organisation selection and repeat authentication validation
-      inside every domain resource service.
+- [x] Add authoritative active-organisation selection, paired `org_id` and
+      `org_roles` claims, context-bound session validation, and repeat token
+      validation inside Organisation Service.
+- [ ] Repeat authentication and active-context validation inside each
+      remaining domain resource service when its vertical slice begins.
 
 Current exit evidence: Auth health, public-only JWKS, and CSRF issuance passed
 a real local-profile HTTP smoke test. A real Eureka/Auth/Gateway smoke test
 also proved discovery routing, separate client cookie jars, public Auth
 reachability, protected-route rejection, and one canonical request ID. The
-Gateway suite passes 16 tests, the full Auth suite passes 112 tests, and the
-full reactor passes 138 tests with no failures, errors, or skips. Active
-organisation context and domain-service validation remain unfinished.
+Gateway suite passes 19 tests, the full Auth suite passes 115 tests,
+Organisation Service passes 22 tests, and the frontend passes 27 tests plus
+typecheck and production build. Active organisation selection is complete;
+resource-server adoption remains incremental for unfinished domain services.
 
 ### F. Security events and audit delivery — `COMPLETE`
 

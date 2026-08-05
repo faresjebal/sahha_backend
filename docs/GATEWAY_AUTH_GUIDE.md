@@ -6,7 +6,7 @@ Last updated: 2026-07-30
 
 The browser-facing Auth entry point is now API Gateway:
 
-- Gateway: `http://localhost:8080`
+- Gateway: `http://localhost:8079`
 - Auth Service: `http://localhost:8081`
 - Eureka: `http://localhost:8761`
 
@@ -37,8 +37,8 @@ Check:
 ```powershell
 Invoke-RestMethod http://localhost:8761/actuator/health
 Invoke-RestMethod http://localhost:8081/actuator/health
-Invoke-RestMethod http://localhost:8080/actuator/health
-Invoke-RestMethod http://localhost:8080/.well-known/jwks.json
+Invoke-RestMethod http://localhost:8079/actuator/health
+Invoke-RestMethod http://localhost:8079/.well-known/jwks.json
 ```
 
 Each health response should be `UP`. The Gateway JWKS response must contain
@@ -46,7 +46,7 @@ public RSA material only; it must never contain a private `d` parameter.
 
 ## Browser authentication flow
 
-1. The browser calls `GET http://localhost:8080/api/v1/auth/csrf` with
+1. The browser calls `GET http://localhost:8079/api/v1/auth/csrf` with
    credentials enabled.
 2. Auth returns the readable `XSRF-TOKEN` cookie and the same value in the JSON
    `token` field.

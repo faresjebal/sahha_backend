@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import com.sahha.auth.config.AuthCookieProperties;
 import com.sahha.auth.security.SecureTokenGenerator;
+import com.sahha.auth.service.accesstokenservice.IssuedAccessToken;
 import com.sahha.auth.service.usersessionservice.IssuedBrowserSession;
 
 @Service
@@ -79,6 +80,20 @@ public class BrowserSessionCookieService {
 						rawDeviceId,
 						properties.refreshPath(),
 						properties.deviceIdLifetime()));
+		noStore(response);
+	}
+
+	public void writeAccessToken(
+			HttpServletResponse response,
+			IssuedAccessToken accessToken) {
+		Instant now = clock.instant();
+		add(
+				response,
+				authCookie(
+						properties.accessTokenName(),
+						accessToken.getRawToken(),
+						properties.accessPath(),
+						remaining(now, accessToken.getExpiresAt())));
 		noStore(response);
 	}
 

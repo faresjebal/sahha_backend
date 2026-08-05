@@ -145,7 +145,6 @@ class BrowserSessionCookieServiceTests {
 		user.verifyEmail(NOW.minusSeconds(59));
 		UserSession session = UserSession.open(
 				user,
-				null,
 				"1".repeat(64),
 				"Test device",
 				null,

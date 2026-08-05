@@ -32,9 +32,42 @@ public class GatewayRouteConfiguration {
 						RequestPredicates.path(
 								"/api/v1/platform/organisations/**")
 								.or(RequestPredicates.path(
-										"/api/v1/platform/organisations")),
+										"/api/v1/platform/organisations"))
+								.or(RequestPredicates.path(
+										"/api/v1/organisations/**"))
+								.or(RequestPredicates.path(
+										"/api/v1/departments/**"))
+								.or(RequestPredicates.path(
+										"/api/v1/departments"))
+								.or(RequestPredicates.path(
+										"/api/v1/staff-invitations/**"))
+								.or(RequestPredicates.path(
+										"/api/v1/staff-invitations"))
+								.or(RequestPredicates.path(
+										"/api/v1/my/staff-invitations/**"))
+								.or(RequestPredicates.path(
+										"/api/v1/my/staff-invitations"))
+								.or(RequestPredicates.path(
+										"/api/v1/staff/**"))
+								.or(RequestPredicates.path(
+										"/api/v1/staff"))
+								.or(RequestPredicates.path(
+										"/api/v1/my/doctor-profile/**"))
+								.or(RequestPredicates.path(
+										"/api/v1/my/doctor-profile")),
 						http())
 				.filter(lb("organisation-service"))
+				.build();
+	}
+
+	@Bean
+	RouterFunction<ServerResponse> patientServiceRoutes() {
+		return route("patient-service")
+				.route(
+						RequestPredicates.path("/api/v1/patients/**")
+								.or(RequestPredicates.path("/api/v1/patients")),
+						http())
+				.filter(lb("patient-service"))
 				.build();
 	}
 }

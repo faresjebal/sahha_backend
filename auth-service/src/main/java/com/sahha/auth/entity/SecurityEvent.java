@@ -54,6 +54,9 @@ public class SecurityEvent {
 	@Column(name = "session_id", updatable = false)
 	private UUID sessionId;
 
+	@Column(name = "active_organisation_id", updatable = false)
+	private UUID activeOrganisationId;
+
 	@Column(name = "request_id", length = 128, updatable = false)
 	private String requestId;
 
@@ -74,6 +77,7 @@ public class SecurityEvent {
 			SecurityEventResult result,
 			String reasonCode,
 			UUID sessionId,
+			UUID activeOrganisationId,
 			String requestId,
 			String ipAddress,
 			String userAgent,
@@ -94,6 +98,7 @@ public class SecurityEvent {
 				"result must not be null");
 		event.reasonCode = optional(reasonCode, 64, "reasonCode");
 		event.sessionId = sessionId;
+		event.activeOrganisationId = activeOrganisationId;
 		event.requestId = optional(requestId, 128, "requestId");
 		event.ipAddress = optional(ipAddress, 45, "ipAddress");
 		event.userAgent = optional(userAgent, 512, "userAgent");

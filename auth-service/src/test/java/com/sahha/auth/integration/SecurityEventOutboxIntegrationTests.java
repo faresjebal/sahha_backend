@@ -72,7 +72,7 @@ class SecurityEventOutboxIntegrationTests {
 						"SELECT to_regclass('public.auth_outbox_event')::text",
 						String.class));
 		assertEquals(
-				"6",
+				"7",
 				flyway.info().current().getVersion().getVersion());
 	}
 

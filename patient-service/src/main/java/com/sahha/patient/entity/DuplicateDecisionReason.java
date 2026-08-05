@@ -1,0 +1,9 @@
+package com.sahha.patient.entity;
+
+public enum DuplicateDecisionReason {
+	SAME_PERSON_CONFIRMED,
+	DEMOGRAPHIC_MATCH_CONFIRMED_DISTINCT,
+	CONTACT_INFORMATION_SHARED,
+	DATA_ENTRY_CORRECTION,
+	OTHER_REVIEWED
+}

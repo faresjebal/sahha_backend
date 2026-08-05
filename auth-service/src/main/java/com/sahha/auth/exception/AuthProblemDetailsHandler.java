@@ -131,6 +131,34 @@ public class AuthProblemDetailsHandler {
 						request));
 	}
 
+	@ExceptionHandler(InvalidOrganisationContextException.class)
+	ResponseEntity<ProblemDetail> invalidOrganisationContext(
+			InvalidOrganisationContextException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.NOT_FOUND,
+				problem(
+						HttpStatus.NOT_FOUND,
+						"Organisation context not found",
+						"No eligible organisation context was found.",
+						"urn:sahha:problem:organisation-context-not-found",
+						request));
+	}
+
+	@ExceptionHandler(OrganisationContextDirectoryUnavailableException.class)
+	ResponseEntity<ProblemDetail> organisationDirectoryUnavailable(
+			OrganisationContextDirectoryUnavailableException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.SERVICE_UNAVAILABLE,
+				problem(
+						HttpStatus.SERVICE_UNAVAILABLE,
+						"Organisation directory unavailable",
+						"The organisation context could not be verified. Try again later.",
+						"urn:sahha:problem:organisation-directory-unavailable",
+						request));
+	}
+
 	@ExceptionHandler(ForbiddenAccountOperationException.class)
 	ResponseEntity<ProblemDetail> forbiddenOperation(
 			ForbiddenAccountOperationException exception,

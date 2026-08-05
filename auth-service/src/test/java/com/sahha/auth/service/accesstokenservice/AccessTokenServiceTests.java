@@ -153,7 +153,6 @@ class AccessTokenServiceTests {
 		user.verifyEmail(NOW.minusSeconds(59));
 		UserSession session = UserSession.open(
 				user,
-				null,
 				"0".repeat(64),
 				"Test device",
 				"Synthetic browser",

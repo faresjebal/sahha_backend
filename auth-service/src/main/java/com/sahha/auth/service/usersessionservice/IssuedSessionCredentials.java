@@ -2,6 +2,7 @@ package com.sahha.auth.service.usersessionservice;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.List;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -30,6 +31,8 @@ public final class IssuedSessionCredentials {
 	private final Instant idleExpiresAt;
 	private final Instant absoluteExpiresAt;
 	private final int credentialVersion;
+	private final UUID activeOrganisationId;
+	private final List<String> activeOrganisationRoles;
 
 	private IssuedSessionCredentials(
 			UUID userId,
@@ -38,7 +41,9 @@ public final class IssuedSessionCredentials {
 			Instant refreshTokenExpiresAt,
 			Instant idleExpiresAt,
 			Instant absoluteExpiresAt,
-			int credentialVersion) {
+			int credentialVersion,
+			UUID activeOrganisationId,
+			List<String> activeOrganisationRoles) {
 		this.userId = Objects.requireNonNull(userId, "userId must not be null");
 		this.sessionId = Objects.requireNonNull(
 				sessionId,
@@ -54,6 +59,16 @@ public final class IssuedSessionCredentials {
 				absoluteExpiresAt,
 				"absoluteExpiresAt must not be null");
 		this.credentialVersion = credentialVersion;
+		this.activeOrganisationId = activeOrganisationId;
+		this.activeOrganisationRoles = List.copyOf(
+				Objects.requireNonNull(
+						activeOrganisationRoles,
+						"activeOrganisationRoles must not be null"));
+		if ((this.activeOrganisationId == null)
+				!= this.activeOrganisationRoles.isEmpty()) {
+			throw new IllegalArgumentException(
+					"active organisation and roles must be present together");
+		}
 	}
 
 	public static IssuedSessionCredentials from(
@@ -76,7 +91,9 @@ public final class IssuedSessionCredentials {
 				requiredToken.getExpiresAt(),
 				requiredSession.getIdleExpiresAt(),
 				requiredSession.getAbsoluteExpiresAt(),
-				requiredSession.getCredentialVersionAtCreation());
+				requiredSession.getCredentialVersionAtCreation(),
+				requiredSession.getActiveOrganisationId(),
+				requiredSession.getActiveOrganisationRoles());
 	}
 
 	private static String requireToken(String rawToken) {

@@ -1,0 +1,41 @@
+{
+  "name": "aegis-medical-platform",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "validate:ui": "node scripts/visual-check.mjs",
+    "smoke:auth": "node scripts/auth-live-smoke.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.5.7",
+    "@tanstack/react-query": "^5.101.4",
+    "@vitejs/plugin-react": "6.0.3",
+    "gsap": "^3.15.0",
+    "lucide-react": "1.24.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-hook-form": "^7.83.0",
+    "react-router-dom": "7.18.2",
+    "vite": "8.1.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "jsdom": "^29.1.1",
+    "playwright-core": "^1.61.1",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "postcss": "8.5.25"
+  }
+}

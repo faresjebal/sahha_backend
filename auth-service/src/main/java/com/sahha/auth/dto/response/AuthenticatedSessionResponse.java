@@ -27,7 +27,12 @@ public record AuthenticatedSessionResponse(
 		Instant sessionAbsoluteExpiresAt,
 
 		@Schema(example = "[\"PLATFORM_ADMIN\"]")
-		List<String> platformRoles) {
+		List<String> platformRoles,
+
+		UUID activeOrganisationId,
+
+		@Schema(example = "[\"ORGANIZATION_ADMIN\"]")
+		List<String> organisationRoles) {
 
 	public static AuthenticatedSessionResponse from(
 			IssuedBrowserSession session) {
@@ -38,6 +43,8 @@ public record AuthenticatedSessionResponse(
 				session.getRefreshTokenExpiresAt(),
 				session.getIdleExpiresAt(),
 				session.getAbsoluteExpiresAt(),
-				session.getPlatformRoles());
+				session.getPlatformRoles(),
+				session.getActiveOrganisationId(),
+				session.getOrganisationRoles());
 	}
 }

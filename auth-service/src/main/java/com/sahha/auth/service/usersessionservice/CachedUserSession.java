@@ -3,6 +3,7 @@ package com.sahha.auth.service.usersessionservice;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.List;
 import java.util.UUID;
 
 import com.sahha.auth.entity.SessionStatus;
@@ -15,16 +16,24 @@ public record CachedUserSession(
 		SessionStatus status,
 		int credentialVersion,
 		UUID activeOrganisationId,
+		List<String> activeOrganisationRoles,
 		Instant idleExpiresAt,
 		Instant absoluteExpiresAt,
 		long version) {
 
-	public static final int CURRENT_SCHEMA_VERSION = 1;
+	public static final int CURRENT_SCHEMA_VERSION = 2;
 
 	public CachedUserSession {
 		Objects.requireNonNull(sessionId, "sessionId must not be null");
 		Objects.requireNonNull(userId, "userId must not be null");
 		Objects.requireNonNull(status, "status must not be null");
+		activeOrganisationRoles = List.copyOf(Objects.requireNonNull(
+				activeOrganisationRoles,
+				"activeOrganisationRoles must not be null"));
+		if ((activeOrganisationId == null) != activeOrganisationRoles.isEmpty()) {
+			throw new IllegalArgumentException(
+					"active organisation and roles must be present together");
+		}
 		Objects.requireNonNull(
 				idleExpiresAt,
 				"idleExpiresAt must not be null");
@@ -60,6 +69,7 @@ public record CachedUserSession(
 				requiredSession.getStatus(),
 				requiredSession.getCredentialVersionAtCreation(),
 				requiredSession.getActiveOrganisationId(),
+				requiredSession.getActiveOrganisationRoles(),
 				requiredSession.getIdleExpiresAt(),
 				requiredSession.getAbsoluteExpiresAt(),
 				requiredSession.getVersion());
@@ -85,6 +95,23 @@ public record CachedUserSession(
 				&& credentialVersion == expectedCredentialVersion
 				&& requiredObservedAt.isBefore(idleExpiresAt)
 				&& requiredObservedAt.isBefore(absoluteExpiresAt);
+	}
+
+	public boolean isActiveForContext(
+			UUID expectedUserId,
+			int expectedCredentialVersion,
+			UUID expectedActiveOrganisationId,
+			List<String> expectedActiveOrganisationRoles,
+			Instant observedAt) {
+		return isActiveFor(
+				expectedUserId,
+				expectedCredentialVersion,
+				observedAt)
+				&& Objects.equals(
+						activeOrganisationId,
+						expectedActiveOrganisationId)
+				&& activeOrganisationRoles.equals(
+						List.copyOf(expectedActiveOrganisationRoles));
 	}
 
 	public Duration timeToLive(

@@ -1,6 +1,8 @@
 package com.sahha.auth.entity;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -31,6 +33,8 @@ import lombok.ToString;
 public class UserSession {
 
 	private static final Pattern SHA_256_HEX = Pattern.compile("^[0-9a-f]{64}$");
+	private static final Pattern ROLE_CODE =
+			Pattern.compile("^[A-Z][A-Z0-9_]{1,63}$");
 
 	@Id
 	@Column(nullable = false, updatable = false)
@@ -49,6 +53,10 @@ public class UserSession {
 
 	@Column(name = "active_organisation_id")
 	private UUID activeOrganisationId;
+
+	@Column(name = "active_organisation_roles", nullable = false, length = 256)
+	@Getter(AccessLevel.NONE)
+	private String activeOrganisationRoleCodes;
 
 	@Column(name = "device_id_hash", nullable = false, length = 64)
 	@Getter(onMethod_ = @JsonIgnore)
@@ -104,7 +112,6 @@ public class UserSession {
 
 	public static UserSession open(
 			UserAccount user,
-			UUID activeOrganisationId,
 			String deviceIdHash,
 			String deviceName,
 			String userAgent,
@@ -122,7 +129,8 @@ public class UserSession {
 		session.id = UUID.randomUUID();
 		session.user = requiredUser;
 		session.status = SessionStatus.ACTIVE;
-		session.activeOrganisationId = activeOrganisationId;
+		session.activeOrganisationId = null;
+		session.activeOrganisationRoleCodes = "";
 		session.deviceIdHash = requireSha256Hex(deviceIdHash, "deviceIdHash");
 		session.deviceName = normalizeOptional(deviceName, 120, "deviceName");
 		session.userAgent = normalizeOptional(userAgent, 512, "userAgent");
@@ -135,6 +143,41 @@ public class UserSession {
 		session.credentialVersionAtCreation = requiredUser.getCredentialVersion();
 		session.updatedAt = requiredCreatedAt;
 		return session;
+	}
+
+	public List<String> getActiveOrganisationRoles() {
+		if (activeOrganisationRoleCodes == null
+				|| activeOrganisationRoleCodes.isEmpty()) {
+			return List.of();
+		}
+		return List.of(activeOrganisationRoleCodes.split(","));
+	}
+
+	public void selectActiveOrganisation(
+			UUID organisationId,
+			Collection<String> roles) {
+		requireActive();
+		UUID requiredOrganisationId = Objects.requireNonNull(
+				organisationId,
+				"organisationId must not be null");
+		List<String> normalizedRoles = Objects.requireNonNull(
+				roles,
+				"roles must not be null")
+				.stream()
+				.map(role -> requireRoleCode(role, "role"))
+				.distinct()
+				.sorted()
+				.toList();
+		if (normalizedRoles.isEmpty()) {
+			throw new IllegalArgumentException("roles must not be empty");
+		}
+		String encodedRoles = String.join(",", normalizedRoles);
+		if (encodedRoles.length() > 256) {
+			throw new IllegalArgumentException(
+					"active organisation roles exceed 256 characters");
+		}
+		this.activeOrganisationId = requiredOrganisationId;
+		this.activeOrganisationRoleCodes = encodedRoles;
 	}
 
 	public void recordActivity(
@@ -295,6 +338,14 @@ public class UserSession {
 		if (!SHA_256_HEX.matcher(required).matches()) {
 			throw new IllegalArgumentException(
 					fieldName + " must be a lowercase SHA-256 hexadecimal value");
+		}
+		return required;
+	}
+
+	private static String requireRoleCode(String value, String fieldName) {
+		String required = requireText(value, 64, fieldName);
+		if (!ROLE_CODE.matcher(required).matches()) {
+			throw new IllegalArgumentException(fieldName + " is invalid");
 		}
 		return required;
 	}

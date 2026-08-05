@@ -1,6 +1,6 @@
 # Sahha internship implementation plan
 
-Last updated: 2026-07-30
+Last updated: 2026-08-05
 
 Status values: `NOT STARTED`, `IN PROGRESS`, `BLOCKED`, `COMPLETE`
 
@@ -22,17 +22,19 @@ task.
 | 0 | Context, scope, baseline audit, and living plan | COMPLETE |
 | 1 | Repository, frontend migration, local infrastructure, and service foundation | IN PROGRESS |
 | 2 | Authentication, active organisation, departments, memberships, and roles | IN PROGRESS |
-| 3 | Administrative patient registry and duplicate detection | NOT STARTED |
+| 3 | Administrative patient registry and duplicate detection | IN PROGRESS |
 | 4 | Doctor availability, appointments, check-in, and real-time appointment notifications | NOT STARTED |
 | 5 | Consultations, diagnoses, medication, finalisation/corrections, and protected files | NOT STARTED |
 | 6 | Doctor messaging, referrals, selected-data sharing, revocation, and expiry | NOT STARTED |
 | 7 | Limited patient portal, audit completion, security hardening, and observability | NOT STARTED |
 | 8 | Full end-to-end verification, CI/CD foundation, and internship demonstration | NOT STARTED |
 
-Current phase: `Phase 2 — Identity, organisations, and authorisation`
+Current phase: `Phase 3 — Administrative patient registry`
 
-Current next task: connect the Platform Administrator organisations screen to
-the real create/list/read Organisation Service APIs.
+Current next task: start Auth, Organisation, Patient, Gateway, and the React
+frontend, then verify the live receptionist registration, duplicate review,
+directory, tenant isolation, and clinical-field exclusion workflow through the
+browser and Gateway.
 
 ## 3. Phase 0 — Context and baseline
 
@@ -162,8 +164,9 @@ Validation evidence:
   `V3__create_user_sessions_and_refresh_tokens.sql`, and
   `V4__create_verification_tokens.sql`, and
   `V5__create_security_events_and_auth_outbox.sql`, and
-  `V6__index_session_retention.sql` applied successfully; development and test
-  schemas report version `6`.
+  `V6__index_session_retention.sql`, and
+  `V7__add_active_organisation_context.sql` applied successfully; the test
+  schema reports version `7` and development advances on the next Auth start.
 - Auth now contains `UserAccount`, `AccountStatus`,
   `UserAccountRepository`, and `EmailNormalizer`, with UUID identity,
   normalized-email uniqueness, state/lock/credential fields, UTC timestamps,
@@ -211,11 +214,11 @@ Validation evidence:
 - A controlled local-account reset proved that dependent verification/session
   data can be removed without changing the seeded `PLATFORM_ADMIN` definition,
   schema, Flyway history, or application code.
-- Auth-focused verification: 112 tests passed with no failures, errors, or
+- Auth-focused verification: 115 tests passed with no failures, errors, or
   skips.
 - Full `.\mvnw.cmd test`: all 13 reactor projects succeeded; 138 tests passed
   with no failures, errors, or skips.
-- Gateway-focused verification: 16 tests cover cookie-only token resolution,
+- Gateway-focused verification: 19 tests cover cookie-only token resolution,
   JWT/JWKS validation, global-role conversion, discovery-aware routing,
   request-context sanitisation, CORS, safe errors, response cookies, and
   downstream cookie isolation.
@@ -317,14 +320,22 @@ Tasks:
       Organisation Service.
 - [x] Allow only a global `PLATFORM_ADMIN` to create an immediately active
       organisation and to list or read organisations.
-- [ ] Model departments, invitations, memberships, membership status,
-      organisation roles, doctor affiliation, and active organisation.
+- [x] Model organisation memberships, membership status, independently
+      assignable organisation roles, identity snapshots, and uniqueness rules.
+- [x] Model departments with organisation-scoped identity, status, audit
+      metadata, uniqueness, and optimistic locking.
+- [x] Model invitations and doctor/receptionist affiliation.
+- [x] Model authoritative active-organisation selection and scoped role
+      snapshots without copying organisation membership ownership into Auth.
+- [x] Allow only a global `PLATFORM_ADMIN` to resolve an exact Auth identity
+      and assign an active verified user as `ORGANIZATION_ADMIN` for one
+      organisation.
 - [ ] Implement applicant registration, documentary verification, and
       approve/reject processing after the internship's direct platform-create
       workflow is complete; this is currently deferred.
-- [ ] Allow an organisation administrator to add, invite, assign, suspend, or
-      remove doctors, receptionists, and other staff only inside an
-      organisation where that administrator has an active admin membership.
+- [x] Allow an organisation administrator to invite, assign, suspend, or
+      remove doctors and receptionists only inside an organisation where that
+      administrator has an active admin membership.
 - [x] Complete IP-aware authentication throttling and
       account-administration workflows.
 - [x] Add owned-session listing/revocation and authenticated password change.
@@ -354,93 +365,172 @@ Tasks:
 - [x] Validate Auth JWT issuer, audience, access-token claims, and global role
       again inside Organisation Service, with explicit CSRF enforcement for
       unsafe cookie-authenticated requests.
-- [ ] Implement active-organisation selection and renew the authenticated
+- [x] Implement active-organisation selection and renew the authenticated
       token/session context after a selection change.
 - [ ] Validate tokens again in every domain service before resource-level
       authorisation.
-- [ ] Prevent arbitrary organisation IDs from overriding the authenticated
-      context.
-- [ ] Implement organisation, department, invitation, staff membership, doctor
-      profile, and receptionist management APIs.
-- [ ] Map frontend roles/routes to canonical V1 roles.
+- [x] Prevent arbitrary organisation IDs from overriding the authenticated
+      token/session context; Organisation Service resolves membership from the
+      authenticated subject before Auth can persist or sign the selection.
+- [x] Implement platform-controlled Organisation Administrator assignment and
+      membership list/read APIs.
+- [x] Implement organisation-scoped department create, list, read, update,
+      activate, and deactivate APIs for an active `ORGANIZATION_ADMIN`.
+- [x] Complete and verify invitation-driven doctor/receptionist membership
+      onboarding APIs.
+- [x] Implement doctor professional profiles and doctor/receptionist
+      membership suspension/removal management APIs.
+- [x] Map the implemented frontend organisation roles/routes to canonical V1
+      `ORGANIZATION_ADMIN`, `DOCTOR`, and `RECEPTIONIST` roles.
 - [x] Integrate patient registration, email verification, login, session-first
       startup restoration, cross-tab renewal, logout, safe errors, and
       cookie/CSRF handling through Gateway in the React application.
-- [ ] Integrate organisation administration screens after Organisation
-      Service owns their real contracts.
+- [x] Integrate the Platform Administrator organisation directory, details,
+      and creation screen with the real Organisation Service contracts through
+      Gateway.
+- [x] Integrate Organisation Administrator assignment/list/read into the
+      Platform Administrator organisation screen.
+- [x] Integrate active-organisation discovery and selection into the React
+      login/session flow, with cross-tab context restoration.
+- [x] Integrate the Organisation Administrator department screen with the real
+      Organisation Service through Gateway and organisation-keyed TanStack
+      Query caching.
+- [x] Integrate organisation-admin invitation management and invited-user
+      accept/reject onboarding with the real Gateway contracts.
+- [x] Integrate the Organisation Administrator staff/clinician directory,
+      department placement, suspension/reactivation/removal controls, and the
+      doctor-owned professional-profile form with the real Gateway contracts.
 - [ ] Seed synthetic platform admin, organisation admin, doctors, and
       receptionists for demonstrations.
 - [x] Emit and record Auth security events through an append-only local record
       and transactional Kafka outbox.
 - [x] Persist organisation creation, its append-only audit record, and a
       minimal secret-free Kafka outbox intent in one transaction.
-- [x] Document the Organisation Service create/list/read contract with
-      OpenAPI/Swagger and validate it with database, HTTP, security, and
-      Gateway integration tests.
+- [x] Document the Organisation Service organisation, administrator
+      membership, and department contracts with OpenAPI/Swagger and validate
+      them with database, HTTP, security, client, Gateway, and frontend tests.
+- [x] Document the staff lifecycle and doctor-profile contracts in
+      OpenAPI/Swagger and cover them with database, HTTP, security, Gateway,
+      and frontend tests.
 
 Security tests:
 
 - [x] A non-platform user cannot create, list, or read platform-managed
       organisations.
-- [ ] A Platform Administrator does not receive organisation staff-management
+- [x] A non-platform user cannot assign an Organisation Administrator, and an
+      inactive or unverified account is rejected before persistence.
+- [x] A Platform Administrator does not receive organisation staff-management
       or clinical access merely from the global platform role.
-- [ ] An Organisation Administrator cannot add or modify staff in another
+- [x] An Organisation Administrator cannot add or modify staff in another
       organisation.
-- [ ] Cross-organisation access is denied.
-- [ ] Suspended users and memberships are denied.
+- [x] Cross-organisation department access is hidden and denied.
+- [x] Suspended memberships are denied even when an older access token still
+      carries the organisation-administrator role.
 - [ ] An organisation administrator cannot read clinical records by role alone.
 - [ ] A user with multiple memberships receives the permissions of only the
       active context.
 - [x] Refresh-token reuse revokes the affected token family.
 - [x] Clearing or disabling Redis does not lose authoritative session or
       revocation state.
+- [x] A token issued before an active-organisation change is rejected after
+      the session context changes, and selection does not rotate the refresh
+      token family.
 - [x] Revoking one device session does not revoke an unrelated device session.
+
+Current milestone validation state:
+
+- The fresh 2026-08-05 unrestricted Maven run passed all 22 Gateway tests and
+  all 36 Organisation tests with zero failures, errors, or skips.
+- The passing Organisation suite covers Flyway version 6 and all seven
+  migration resources, OpenAPI, staff invitations, doctor/receptionist
+  affiliation, tenant hiding, department placement, membership lifecycle,
+  doctor-profile ownership, CSRF, optimistic versions, audit, and outbox data
+  minimisation.
+- Frontend typecheck, all 45 Vitest tests, and the Vite production build pass.
+- All 119 Organisation production sources compile successfully.
 
 Exit criteria:
 
 - [x] Only a Platform Administrator can directly create an active
       organisation, and the creation is audited without exposing contact data
       in the outbox event.
-- [ ] The designated Organisation Administrator can configure that
+- [x] Only a Platform Administrator can assign an eligible existing user as
+      that organisation's administrator, and the target-aware audit/outbox
+      records exclude identity display data.
+- [x] The designated Organisation Administrator can configure that
       organisation and its departments and add a doctor and receptionist.
 - [ ] The doctor and receptionist can authenticate in the correct organisation.
-- [ ] Role and tenant denial tests pass at controller, service, and integration
+- [x] Role and tenant denial tests pass at controller, service, and integration
       levels.
 
 ## 6. Phase 3 — Administrative patient registry
 
-Status: `NOT STARTED`
+Status: `IN PROGRESS`
 
 Goal: allow authorised administrative registration and search without exposing
 clinical data.
 
 Tasks:
 
-- [ ] Model the global patient identity and organisation-specific registration
+- [x] Model the global patient identity and organisation-specific registration
       or medical-record number.
-- [ ] Define administrative patient create, update, list, detail, and search
+- [x] Define administrative patient create, update, list, detail, and search
       DTOs.
-- [ ] Store national identifier/passport safely and define masking rules.
-- [ ] Implement exact duplicate checks for strong identifiers.
-- [ ] Implement candidate duplicate scoring for phone, email, and
+- [x] Store national identifier/passport safely and define masking rules.
+- [x] Implement exact duplicate checks for strong identifiers.
+- [x] Implement candidate duplicate scoring for phone, email, and
       name/date-of-birth combinations.
-- [ ] Require an authorised decision when a possible duplicate is found.
-- [ ] Add optimistic locking and audit history for administrative edits.
-- [ ] Ensure receptionist responses contain no diagnoses, notes, allergies,
+- [x] Require an authorised decision when a possible duplicate is found.
+- [x] Add optimistic locking and audit history for administrative edits.
+- [x] Ensure receptionist responses contain no diagnoses, notes, allergies,
       prescriptions, or other clinical fields.
-- [ ] Split the frontend's current combined `Patient` model into role-safe
+- [x] Split the frontend's current combined `Patient` model into role-safe
       administrative and clinical projections.
-- [ ] Integrate receptionist patient registration, directory, search, and
+- [x] Integrate receptionist patient registration, directory, search, and
       administrative profile screens.
 - [ ] Add synthetic patient fixtures only.
 
+Verified implementation:
+
+- Patient Service Flyway version 1 defines global stable identity,
+  organisation-specific administrative registration/contact data,
+  organisation-local medical-record numbers, append-only audit, and outbox
+  tables in the service-owned database.
+- Cookie JWT validation, CSRF, role checks, active organisation extraction, and
+  live Organisation Service context revalidation protect every Patient API.
+- Create, duplicate-check, list/search, detail, update, and administrative
+  history contracts are implemented under `/api/v1/patients` and documented by
+  Springdoc.
+- Strong identifiers use deterministic HMAC-SHA-256 fingerprints scoped by
+  identifier type and issuing country; only the last four characters are
+  retained for masking. Phone, email, and name/date-of-birth matches receive
+  deterministic weighted reasons.
+- Possible duplicates return masked candidates and require `LINK_EXISTING` or
+  an audited `CREATE_NEW` reason. Exact strong-identifier matches cannot be
+  overridden into a new identity.
+- Gateway routing and negative tenant/role/CSRF/clinical-field tests pass. The
+  fresh local Maven run verified 10 Patient Service tests and 23 Gateway tests
+  with zero failures, errors, or skips.
+
+Verified frontend evidence:
+
+- Added a separate administrative patient contract and real Gateway REST
+  adapter; the legacy clinical/mock presentation type is not used by the
+  receptionist screens.
+- Replaced the receptionist directory and registration routes with TanStack
+  Query, React Hook Form, and Zod screens covering search, detail, masked
+  duplicate review, explicit linking, and reviewed distinct-patient creation.
+- `npm.cmd run typecheck`, the full 50-test Vitest suite, and the Vite production
+  build pass. The five new patient REST/component tests are included in those
+  totals.
+
 Exit criteria:
 
-- [ ] A receptionist can register and find a patient.
-- [ ] Duplicate candidates are presented safely and do not create silent
+- [x] A receptionist can register and find a patient.
+- [x] Duplicate candidates are presented safely and do not create silent
       duplicates.
-- [ ] Receptionist clinical-data denial and response-serialization tests pass.
-- [ ] A different organisation cannot browse the patient registration.
+- [x] Receptionist clinical-data denial and response-serialization tests pass.
+- [x] A different organisation cannot browse the patient registration.
 
 ## 7. Phase 4 — Scheduling and appointment notifications
 
@@ -672,6 +762,9 @@ Exit criteria:
 | 2026-07-30 | Keep any future platform approval authority separate from organisation staff administration. | If the deferred registration/review workflow is added, only the Platform Administrator approves it, while the Organisation Administrator remains scoped to staff and departments; direct platform creation supersedes approval for the current slice. |
 | 2026-07-30 | Use direct Platform Administrator organisation creation for the current internship slice. | It delivers the first controlled organisation workflow now; applicant registration, regulatory documents, authenticity checks, and approve/reject processing remain an explicitly deferred production workflow. |
 | 2026-07-30 | Require an explicit CSRF cookie/header match for unsafe cookie-bearer requests in resource services. | Spring Security's Resource Server defaults exempt bearer-token requests from CSRF because header bearers are normally not ambient credentials; Sahha's bearer is an ambient cookie and therefore needs additional double-submit enforcement. |
+| 2026-08-05 | Separate global stable patient identity from organisation-owned registration and contact data. | Exact identity matching can link one person safely while each organisation keeps an isolated medical-record number and local administrative projection. |
+| 2026-08-05 | Persist only a type/country-scoped HMAC fingerprint and last-four mask for national IDs and passports. | Exact matching remains deterministic without storing or returning the submitted raw strong identifier. |
+| 2026-08-05 | Revalidate receptionist/administrator membership live through Organisation Service for every Patient API use case. | Signed organisation claims provide coarse policy, while suspension and role changes must take effect from the authoritative membership owner. |
 
 ## 14. Risks and controls
 
@@ -702,6 +795,288 @@ Use this checklist after every task:
 7. Add a dated change-log entry below.
 
 ## 16. Change log
+
+### 2026-08-05 — Patient and Gateway backend validation completed
+
+- Inspected the fresh Surefire reports after applying Patient Flyway version
+  2. All 10 Patient Service tests and all 23 Gateway tests passed with zero
+  failures, errors, or skips.
+- Verified migration and Hibernate schema validation, Patient application
+  startup, HMAC identifier protection, registration/search/detail, duplicate
+  decisions, cross-organisation hiding, receptionist projection boundaries,
+  CSRF/role/version denial, OpenAPI, and Gateway routing.
+- Marked the now-verified Phase 3 implementation and security tasks complete.
+  Phase 3 itself remains in progress until the real services and frontend pass
+  the live receptionist workflow through Gateway.
+- Next: start the required local services and perform the live Phase 3 browser
+  workflow with synthetic patient data.
+
+### 2026-08-05 — Administrative patient registry implementation started
+
+- Corrected the first local backend validation failure with forward-only
+  Patient Flyway version 2. PostgreSQL exposed the fixed-length identifier and
+  country columns as `bpchar`, while their JPA mappings require `VARCHAR`;
+  version 2 aligns all three affected columns without changing the already
+  applied version 1 migration. The persistence test now expects schema version
+  2. Gateway tests had passed; the apparent Patient-wide failure was one
+  shared application-context startup error followed by Spring's context
+  failure-threshold skips.
+- Replaced the database-free Patient scaffold with a service-owned PostgreSQL
+  configuration, Hibernate validation, and Flyway version 1 for stable patient
+  identity, tenant registration/contact records, append-only audit, and a
+  transactional outbox.
+- Added keyed HMAC identifier protection and last-four masking; neither API
+  responses, local audit metadata, nor outbox payloads contain a submitted
+  national ID/passport, patient name, address, phone, or email.
+- Added weighted duplicate detection for strong identifier,
+  name/date-of-birth, phone, and email matches. Masked candidates require an
+  explicit same-person link or enumerated distinct-person reason; an exact
+  strong-identifier match cannot be overridden.
+- Added tenant-scoped create, duplicate-check, list/search, detail, optimistic
+  update, and administrative-history endpoints with safe Problem Details and
+  OpenAPI documentation.
+- Added Patient resource-server validation, cookie CSRF enforcement, coarse
+  receptionist/Organisation Administrator policy, live Organisation Service
+  membership revalidation, and cross-organisation `404` resource hiding.
+- Added acknowledgement-aware Patient outbox publication code and a minimal
+  PII-free event mapper. Publication remains disabled by default until Kafka is
+  intentionally started.
+- Routed `/api/v1/patients` through Gateway and added a routing integration
+  test.
+- Added backend integration tests for registration/search/detail, masked exact
+  matching and cross-organisation linking, reviewed possible duplicates,
+  clinical-field serialization boundaries, CSRF/role/version denial, Flyway,
+  append-only audit, identifier protection, and OpenAPI.
+- Added the frontend administrative patient model and REST adapter separately
+  from the legacy clinical/mock `Patient`, then connected the receptionist
+  directory/detail and registration/duplicate-review screens with TanStack
+  Query, React Hook Form, and Zod.
+- Verified `npm.cmd run typecheck`, all 50 frontend tests, the Vite production
+  build, and `git diff --check`. The offline Maven check also confirmed the
+  blocker is environmental: Spring Boot parent `4.1.0` is absent from the
+  local cache and Maven Central is unavailable inside the restricted sandbox.
+  No Patient or updated Gateway backend test is marked complete yet.
+- Next: run the Patient Service and Gateway Maven suites against local
+  PostgreSQL and fix any reported failures before live browser validation.
+
+### 2026-08-05 — Phase 2 backend validation fixes
+
+- Inspected the fresh unrestricted Surefire reports instead of relying on the
+  earlier sandbox compilation attempt. All 22 Gateway tests passed.
+- Traced all 30 initial Organisation context errors to one missing test-only
+  configuration value: `StaffInvitationProperties.validity` was `null`
+  because the test `application.properties` overrides the main resource.
+- Added `sahha.organisation.staff-invitation.validity=P7D` explicitly to the
+  Organisation test configuration. The next Organisation run started Flyway
+  version 6, validated seven migration resources, and passed 35 of 36 tests.
+- Traced the sole remaining `401`/`404` mismatch to a malformed four-segment
+  mocked JWT in `StaffInvitationHttpIntegrationTests`; the production resolver
+  correctly requires three segments. Corrected only the fixture and preserved
+  the expected cross-organisation `404` hiding behavior.
+- The fresh unrestricted rerun completed at 00:39 on 2026-08-05: all 22
+  Gateway tests and all 36 Organisation tests passed with zero failures,
+  errors, or skips. The organisation staff lifecycle slice is verified.
+- Next: inspect the Patient Service skeleton and existing frontend registration
+  contracts, then define the tenant-scoped administrative patient-registry
+  contract before implementing its first migration.
+
+### 2026-08-04 — Organisation staff directory and membership lifecycle
+
+- Added Organisation Service Flyway version 6 with tenant-constrained staff
+  department assignments and organisation-specific doctor profiles. Composite
+  foreign keys prevent cross-organisation membership/department references;
+  partial unique indexes allow only one active placement per department and
+  one active primary placement per staff membership.
+- Added active-organisation administrator APIs to list/read accepted doctors
+  and receptionists, assign/end department placement, suspend/reactivate
+  access, and permanently remove a membership. Removal deactivates the staff
+  role and ends active assignments; a removed membership cannot be restored.
+- Added doctor-owned create/read/update professional-profile APIs. The
+  administrator can read a doctor's organisation profile but cannot edit it;
+  receptionists cannot use the doctor endpoint. External documentary licence
+  verification remains deferred and examples use synthetic data.
+- Enforced controller roles plus live membership/role/organisation checks,
+  tenant resource hiding, CSRF on mutations, optimistic versions, safe Problem
+  Details, append-only audit records, and minimal outbox payloads that omit
+  professional and identity details.
+- Added Gateway routes and OpenAPI coverage, expanded the Organisation Swagger
+  guide, and added migration, HTTP lifecycle, role-denial, cross-tenant,
+  audit/outbox, Gateway, frontend REST-adapter, and page tests.
+- Replaced the Organisation Administrator's mocked Clinical teams and Staffing
+  surfaces with the real staff directory while leaving non-admin Operations
+  views unchanged. Added the doctor Professional profile route and preserved
+  organisation-keyed TanStack Query caches.
+- Verification passed for all 45 frontend tests, frontend TypeScript, the Vite
+  production build, and Organisation Service production compilation of all
+  119 sources. Backend test compilation remains unverified
+  because this restricted Java process cannot access the external Maven cache;
+  the requested elevated read was denied. No backend test is marked passed.
+- Next: run the Organisation and Gateway staff-directory, invitation,
+  migration, OpenAPI, and security suites in an unrestricted local terminal,
+  resolve any failures, and only then mark the Phase 2 staff lifecycle slice
+  complete.
+
+### 2026-08-04 — Staff invitation and membership onboarding implementation
+
+- Added Organisation Service Flyway version 5 and a tenant-owned staff
+  invitation lifecycle for `DOCTOR` and `RECEPTIONIST`, including normalized
+  email targeting, seven-day expiry, renew/revoke/accept/reject actions,
+  optimistic locking, and one unresolved invitation per organisation/email.
+- Added active-organisation-scoped administrator APIs plus caller-owned
+  invitation APIs. The invited account is resolved through Auth's new
+  caller-only `/api/v1/auth/account` projection; administrators cannot browse
+  arbitrary Auth identities through this workflow.
+- Kept the Auth network lookup outside the Organisation database transaction.
+  Acceptance then creates the membership, assigns exactly the invited role,
+  resolves the invitation, and stores append-only audit/outbox records in one
+  Organisation transaction.
+- Enforced live organisation-administrator membership checks, exact invited
+  email binding, resource hiding across organisations/accounts, CSRF on
+  mutations, safe Problem Details, and minimal secret-free outbox payloads.
+- Added Gateway routes, OpenAPI assertions, Auth client coverage, and
+  Organisation lifecycle/security integration tests.
+- Replaced the mocked organisation access screen with real invitation
+  management and added invitation accept/reject to organisation selection so a
+  new staff member can join before an active organisation exists. Invitation
+  responses include the authoritative organisation display name so the user
+  knows which organisation they are joining before deciding.
+- Verification passed for frontend TypeScript, all 38 frontend tests, Vite
+  production build, and `git diff --check`. Backend production compilation
+  produced the affected classes and reported `BUILD SUCCESS`, but backend test
+  compilation could not run because the restricted Java process receives
+  `AccessDeniedException` for the external Maven cache. No backend test is
+  marked verified from that attempt.
+- Next: run the Auth, Organisation, and Gateway invitation test suites in an
+  unrestricted local terminal, resolve any failures, and mark the onboarding
+  slice complete only after they pass.
+
+### 2026-08-01 — Organisation-scoped department management
+
+- Added Organisation Service Flyway version 4 with tenant-owned departments,
+  organisation-local normalized-name/code uniqueness, active/inactive state,
+  audit metadata, indexes, constraints, and optimistic locking.
+- Added create, paginated list, read, update, and status-change APIs under
+  `/api/v1/departments`. The organisation ID comes only from the signed
+  `org_id` claim; it is absent from request forms and resource paths.
+- Enforced both `ORGANIZATION_ADMIN` authority and a live database check for
+  the caller's active membership, active role, and active organisation.
+  Cross-organisation resource IDs return `404`; global `PLATFORM_ADMIN` or
+  doctor roles alone return `403`; suspended memberships remain denied even
+  when presented with a previously issued role-bearing token.
+- Made every department mutation atomic with an append-only audit event and a
+  minimal transactional outbox intent containing identifiers, status, and
+  event metadata but no department description or organisation contact data.
+- Added duplicate conflict and stale-version Problem Details, CSRF enforcement,
+  OpenAPI operations, Gateway discovery routing, and full lifecycle/security
+  integration coverage.
+- Replaced the mocked Organisation Administrator department page with a real
+  Gateway-backed React screen using TanStack Query cache keys scoped by active
+  organisation, React Hook Form/Zod validation, create/edit/status workflows,
+  safe error states, search, and responsive styling.
+- Verification passed: Organisation Service 27 tests, Gateway 20 tests,
+  frontend 32 tests, TypeScript typecheck, and Vite production build, with no
+  failures, errors, or skips.
+- Next: model the staff-invitation lifecycle and implement active-organisation
+  doctor/receptionist invitation and membership onboarding with tenant-denial
+  coverage.
+
+### 2026-08-01 — Eureka client isolation and Gateway port alignment
+
+- Diagnosed live healthy Auth and Organisation processes that created Eureka
+  clients but never opened a connection or registered, while Gateway registered
+  normally on port `8079`.
+- Separated a primary plain `RestClient.Builder`, used by Eureka's bootstrap
+  HTTP transport, from each explicitly qualified load-balanced builder used for
+  Auth-to-Organisation and Organisation-to-Auth calls. This prevents service
+  discovery from depending circularly on an initially empty service registry.
+- Aligned the frontend local/example environment, smoke script, README, and
+  current Auth/Gateway guides with the user's Gateway port `8079`.
+- Live verification registered Auth on `8081`; an isolated Organisation
+  instance registered on `9082` and was then stopped. Both application-context
+  tests, frontend typecheck, and all 27 frontend tests passed. The existing
+  IntelliJ Organisation process requires one restart to load the compiled fix.
+- Next remains: model departments and implement active-organisation-scoped
+  department management with cross-organisation denial tests.
+
+### 2026-08-01 — Active organisation and scoped session context
+
+- Added authenticated Organisation Service context APIs that list and resolve
+  only the caller's active memberships in active organisations with active
+  organisation roles; the user ID always comes from the verified JWT subject.
+- Added Auth Service Flyway version 7 and persisted a validated active
+  organisation plus canonical role snapshot on each `UserSession`, while
+  retaining PostgreSQL as authority and upgrading the Redis projection schema.
+- Added `POST /api/v1/auth/active-organisation`. Auth validates the requested
+  context through the Eureka-aware Organisation Service client, locks the
+  caller-owned session, updates Redis only after commit, records an append-only
+  security event/outbox intent, and issues a new access cookie without creating
+  or rotating a refresh token.
+- Added `org_id` and `org_roles` access-token claims and context-bound Auth
+  validation. A token carrying the previous context is rejected as soon as the
+  session selection changes; Gateway and Organisation Service also reject
+  malformed or unpaired scoped claims.
+- Added Gateway routing for authenticated organisation APIs and kept
+  Organisation Service's resource-server and membership checks authoritative.
+- Added the React organisation selector, TanStack Query context discovery,
+  canonical role-to-workspace routing, no-membership handling, safe error
+  states, and a storage event that makes other tabs restore the changed
+  server-side context without placing an organisation ID in browser storage.
+- Verification passed: Auth Service 115 tests, Organisation Service 22 tests,
+  Gateway 19 tests, frontend 27 tests, TypeScript typecheck, and Vite production
+  build. The final Auth constructor refinement also compiled successfully.
+- Next: model departments and implement active-organisation-scoped department
+  management with cross-organisation denial tests.
+
+### 2026-07-31 — Organisation Administrator membership assignment
+
+- Added an exact-email Platform Account directory endpoint in Auth Service
+  that returns only the identity fields required for membership eligibility;
+  password, credential-version, session, and token data are never returned.
+- Added Organisation Service Flyway version 3 with organisation memberships,
+  separate multi-role assignments, lifecycle constraints, organisation/user
+  uniqueness, lookup indexes, and target/resource-aware audit metadata.
+- Added an Eureka-aware Auth account client that forwards only the current
+  access credential, never a refresh or CSRF cookie, and keeps Organisation
+  Service out of the Auth database.
+- Added platform-protected assign/list/read administrator APIs beneath
+  `/api/v1/platform/organisations/{organisationId}/administrators`, including
+  exact account resolution, active/verified eligibility, duplicate denial,
+  CSRF enforcement, safe Problem Details, and OpenAPI documentation.
+- Made administrator assignment atomic across the membership, active
+  `ORGANIZATION_ADMIN` role, append-only audit event, and secret-free Kafka
+  outbox event; email and display-name snapshots are excluded from the event.
+- Added the real Platform Admin assignment panel with TanStack Query,
+  React Hook Form/Zod validation, identity and eligibility error states,
+  membership list/read details, and cache invalidation after assignment.
+- Verification passed: Auth Service 114 tests, Organisation Service 21 tests,
+  Gateway 18 tests, frontend 25 tests, TypeScript typecheck, and Vite production
+  build, with no failures, errors, or skips.
+- Next: implement validated active-organisation selection and renew the
+  authenticated session/token context with its scoped membership roles.
+
+### 2026-07-31 — Platform organisation frontend integration
+
+- Assigned the existing verified local development user a global
+  `PLATFORM_ADMIN` role through a trusted manual database bootstrap; no
+  password was created, recovered, or stored in plaintext.
+- Added typed Organisation Service create/list/read frontend contracts and a
+  Gateway-only REST adapter that inherits cookie authentication and CSRF
+  protection from the shared HTTP client.
+- Added TanStack Query at the application root with bounded staleness and
+  conservative retries, then replaced the fake Platform Organizations screen
+  with a searchable real directory, selected-resource details, organisation
+  metrics, and a validated creation workflow.
+- Added safe expired-session, missing-role, duplicate-name, loading, empty, and
+  service-unavailable states without exposing backend internals.
+- Kept the Gateway address environment-driven through `VITE_API_BASE_URL`, so
+  the user's local Gateway port can change without editing feature code.
+- Added REST and component coverage for Gateway URLs, credentialed requests,
+  CSRF headers, create/list/read behaviour, real-data rendering, form mapping,
+  and 403 guidance.
+- Verification passed: TypeScript typecheck, six focused tests, 22 complete
+  frontend tests, and the Vite production build.
+- Next: implement platform-controlled Organisation Administrator membership
+  assignment and persistence in Organisation Service.
 
 ### 2026-07-30 — Platform-created organisation vertical slice
 

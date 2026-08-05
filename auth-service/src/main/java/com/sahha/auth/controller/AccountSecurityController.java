@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.sahha.auth.dto.request.ChangePasswordRequest;
 import com.sahha.auth.dto.response.ActiveSessionResponse;
 import com.sahha.auth.dto.response.CurrentSessionResponse;
+import com.sahha.auth.dto.response.CurrentAccountResponse;
 import com.sahha.auth.exception.OwnedSessionNotFoundException;
 import com.sahha.auth.security.SessionBoundJwtValidator;
 import com.sahha.auth.service.browsersessionservice.BrowserSessionCookieService;
@@ -89,6 +90,19 @@ public class AccountSecurityController {
 		return ResponseEntity.ok()
 				.cacheControl(CacheControl.noStore())
 				.body(CurrentSessionResponse.from(jwt));
+	}
+
+	@GetMapping("/account")
+	@Operation(
+			operationId = "getCurrentAccount",
+			summary = "Read the current account's authoritative identity",
+			description = "Returns only the authenticated caller's account identity and verification state.")
+	public ResponseEntity<CurrentAccountResponse> currentAccount(
+			@AuthenticationPrincipal Jwt jwt) {
+		return ResponseEntity.ok()
+				.cacheControl(CacheControl.noStore())
+				.body(accountSecurityService.currentAccount(
+						UUID.fromString(jwt.getSubject())));
 	}
 
 	@DeleteMapping("/sessions/{sessionId}")

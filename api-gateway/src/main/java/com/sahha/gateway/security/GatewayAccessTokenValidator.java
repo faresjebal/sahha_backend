@@ -15,6 +15,8 @@ public final class GatewayAccessTokenValidator
 	public static final String SESSION_ID_CLAIM = "sid";
 	public static final String CREDENTIAL_VERSION_CLAIM = "cv";
 	public static final String PLATFORM_ROLES_CLAIM = "roles";
+	public static final String ACTIVE_ORGANISATION_ID_CLAIM = "org_id";
+	public static final String ORGANISATION_ROLES_CLAIM = "org_roles";
 	public static final String TOKEN_TYPE_CLAIM = "token_type";
 	public static final String ACCESS_TOKEN_TYPE = "access";
 
@@ -41,17 +43,36 @@ public final class GatewayAccessTokenValidator
 				return failure();
 			}
 			Object roles = token.getClaims().get(PLATFORM_ROLES_CLAIM);
-			if (!(roles instanceof Collection<?> roleValues)
-					|| roleValues.stream().anyMatch(
-							role -> !(role instanceof String value)
-									|| !ROLE_CODE.matcher(value).matches())) {
+			if (!validRoles(roles)) {
 				return failure();
+			}
+			String organisationId = token.getClaimAsString(
+					ACTIVE_ORGANISATION_ID_CLAIM);
+			Object organisationRoles = token.getClaims().get(
+					ORGANISATION_ROLES_CLAIM);
+			if (!validRoles(organisationRoles)) {
+				return failure();
+			}
+			Collection<?> organisationRoleValues =
+					(Collection<?>) organisationRoles;
+			if ((organisationId == null) != organisationRoleValues.isEmpty()) {
+				return failure();
+			}
+			if (organisationId != null) {
+				UUID.fromString(organisationId);
 			}
 			return OAuth2TokenValidatorResult.success();
 		}
 		catch (RuntimeException invalidClaim) {
 			return failure();
 		}
+	}
+
+	private static boolean validRoles(Object claim) {
+		return claim instanceof Collection<?> values
+				&& values.stream().allMatch(
+						role -> role instanceof String value
+								&& ROLE_CODE.matcher(value).matches());
 	}
 
 	private static OAuth2TokenValidatorResult failure() {

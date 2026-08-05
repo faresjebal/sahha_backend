@@ -68,7 +68,7 @@ and expected denials are in
 [`docs/ORGANISATION_SWAGGER_GUIDE.md`](docs/ORGANISATION_SWAGGER_GUIDE.md).
 
 For the browser-facing flow, also start Discovery and Gateway. The frontend
-calls Auth through Gateway on port `8080`; the start order, routes, cookies,
+calls Auth through Gateway on port `8079`; the start order, routes, cookies,
 CSRF flow, security boundaries, and verified commands are in
 [`docs/GATEWAY_AUTH_GUIDE.md`](docs/GATEWAY_AUTH_GUIDE.md).
 The registration, email-verification, login, refresh, and logout walkthrough
@@ -97,7 +97,7 @@ Default local ports:
 
 | Application | Port |
 | --- | ---: |
-| API Gateway | 8080 |
+| API Gateway | 8079 |
 | Auth | 8081 |
 | Organisation | 8082 |
 | Patient | 8083 |

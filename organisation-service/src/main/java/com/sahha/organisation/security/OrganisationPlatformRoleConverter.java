@@ -13,12 +13,17 @@ public final class OrganisationPlatformRoleConverter
 
 	@Override
 	public Collection<GrantedAuthority> convert(Jwt jwt) {
-		List<String> roles = jwt.getClaimAsStringList(
+		List<String> platformRoles = jwt.getClaimAsStringList(
 				OrganisationAccessTokenValidator.PLATFORM_ROLES_CLAIM);
-		if (roles == null) {
-			return List.of();
-		}
-		return roles.stream()
+		List<String> organisationRoles = jwt.getClaimAsStringList(
+				OrganisationAccessTokenValidator.ORGANISATION_ROLES_CLAIM);
+		return java.util.stream.Stream.concat(
+				platformRoles == null
+						? java.util.stream.Stream.empty()
+						: platformRoles.stream(),
+				organisationRoles == null
+						? java.util.stream.Stream.empty()
+						: organisationRoles.stream())
 				.distinct()
 				.sorted()
 				.map(role -> (GrantedAuthority)

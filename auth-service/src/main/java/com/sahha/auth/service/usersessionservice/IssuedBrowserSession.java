@@ -36,6 +36,8 @@ public final class IssuedBrowserSession {
 	private final Instant idleExpiresAt;
 	private final Instant absoluteExpiresAt;
 	private final List<String> platformRoles;
+	private final UUID activeOrganisationId;
+	private final List<String> organisationRoles;
 
 	public IssuedBrowserSession(
 			IssuedSessionCredentials session,
@@ -60,5 +62,8 @@ public final class IssuedBrowserSession {
 				Objects.requireNonNull(
 						platformRoles,
 						"platformRoles must not be null"));
+		this.activeOrganisationId = requiredSession.getActiveOrganisationId();
+		this.organisationRoles = List.copyOf(
+				requiredSession.getActiveOrganisationRoles());
 	}
 }

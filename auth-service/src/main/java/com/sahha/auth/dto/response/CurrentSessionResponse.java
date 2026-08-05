@@ -25,16 +25,31 @@ public record CurrentSessionResponse(
 		Instant accessTokenExpiresAt,
 
 		@Schema(example = "[\"PLATFORM_ADMIN\"]")
-		List<String> platformRoles) {
+		List<String> platformRoles,
+
+		UUID activeOrganisationId,
+
+		@Schema(example = "[\"ORGANIZATION_ADMIN\"]")
+		List<String> organisationRoles) {
 
 	public static CurrentSessionResponse from(Jwt jwt) {
 		List<String> roles = jwt.getClaimAsStringList(
 				SessionBoundJwtValidator.PLATFORM_ROLES_CLAIM);
+		List<String> organisationRoles = jwt.getClaimAsStringList(
+				SessionBoundJwtValidator.ORGANISATION_ROLES_CLAIM);
+		String activeOrganisationId = jwt.getClaimAsString(
+				SessionBoundJwtValidator.ACTIVE_ORGANISATION_ID_CLAIM);
 		return new CurrentSessionResponse(
 				UUID.fromString(jwt.getSubject()),
 				UUID.fromString(jwt.getClaimAsString(
 						SessionBoundJwtValidator.SESSION_ID_CLAIM)),
 				jwt.getExpiresAt(),
-				roles == null ? List.of() : List.copyOf(roles));
+				roles == null ? List.of() : List.copyOf(roles),
+				activeOrganisationId == null
+						? null
+						: UUID.fromString(activeOrganisationId),
+				organisationRoles == null
+						? List.of()
+						: List.copyOf(organisationRoles));
 	}
 }

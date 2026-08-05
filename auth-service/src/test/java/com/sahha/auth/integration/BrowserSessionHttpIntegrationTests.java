@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -15,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
+import java.util.Set;
 import java.util.UUID;
 
 import com.jayway.jsonpath.JsonPath;
@@ -29,7 +31,10 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import com.sahha.auth.client.organisation.OrganisationContextClient;
+import com.sahha.auth.client.organisation.OrganisationContextResource;
 import com.sahha.auth.entity.SessionStatus;
 import com.sahha.auth.entity.AccountStatus;
 import com.sahha.auth.entity.PlatformRoleCode;
@@ -76,6 +81,89 @@ class BrowserSessionHttpIntegrationTests {
 
 	@Autowired
 	private UserPlatformRoleRepository platformRoleAssignmentRepository;
+
+	@MockitoBean
+	private OrganisationContextClient organisationContextClient;
+
+	@Test
+	void activeOrganisationSelectionRenewsOnlyAccessAndSurvivesRefresh()
+			throws Exception {
+		VerifiedAccount account = verifiedAccount("organisation-context");
+		MvcResult login = login(account, "Organisation laptop");
+		Cookie originalAccess = responseCookie(login, "SAHHA_ACCESS_TOKEN");
+		Cookie refresh = responseCookie(login, "SAHHA_REFRESH_TOKEN");
+		Cookie device = responseCookie(login, "SAHHA_DEVICE_ID");
+		CsrfExchange csrf = responseCsrf(login);
+		UUID organisationId = UUID.randomUUID();
+		UUID membershipId = UUID.randomUUID();
+		when(organisationContextClient.resolve(
+				organisationId,
+				originalAccess.getValue()))
+				.thenReturn(new OrganisationContextResource(
+						membershipId,
+						organisationId,
+						"Synthetic Clinic",
+						"CLINIC",
+						Set.of("ORGANIZATION_ADMIN"),
+						3));
+		long refreshCountBefore = refreshTokenRepository.count();
+
+		MvcResult selected = mockMvc.perform(post(
+						"/api/v1/auth/active-organisation")
+					.cookie(originalAccess, csrf.cookie())
+					.header("X-XSRF-TOKEN", csrf.token())
+					.contentType(MediaType.APPLICATION_JSON)
+					.content("{\"organisationId\":\"" + organisationId + "\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.activeOrganisationId")
+						.value(organisationId.toString()))
+				.andExpect(jsonPath("$.organisationRoles[0]")
+						.value("ORGANIZATION_ADMIN"))
+				.andExpect(jsonPath("$.membershipId")
+						.value(membershipId.toString()))
+				.andReturn();
+
+		Cookie selectedAccess = responseCookie(
+				selected,
+				"SAHHA_ACCESS_TOKEN");
+		assertEquals(
+				0,
+				selected.getResponse().getHeaders(HttpHeaders.SET_COOKIE)
+						.stream()
+						.filter(value -> value.startsWith(
+								"SAHHA_REFRESH_TOKEN="))
+						.count());
+		assertEquals(refreshCountBefore, refreshTokenRepository.count());
+		Jwt selectedJwt = jwtDecoder.decode(selectedAccess.getValue());
+		assertEquals(
+				organisationId.toString(),
+				selectedJwt.getClaimAsString("org_id"));
+		assertEquals(
+				java.util.List.of("ORGANIZATION_ADMIN"),
+				selectedJwt.getClaimAsStringList("org_roles"));
+		UUID sessionId = UUID.fromString(JsonPath.read(
+				selected.getResponse().getContentAsString(),
+				"$.sessionId"));
+		var persisted = sessionRepository.findById(sessionId).orElseThrow();
+		assertEquals(organisationId, persisted.getActiveOrganisationId());
+		assertEquals(
+				java.util.List.of("ORGANIZATION_ADMIN"),
+				persisted.getActiveOrganisationRoles());
+
+		mockMvc.perform(get("/api/v1/auth/session")
+					.cookie(originalAccess))
+				.andExpect(status().isUnauthorized());
+
+		CsrfExchange selectedCsrf = csrf();
+		mockMvc.perform(post("/api/v1/auth/refresh")
+					.cookie(refresh, device, selectedCsrf.cookie())
+					.header("X-XSRF-TOKEN", selectedCsrf.token()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.activeOrganisationId")
+						.value(organisationId.toString()))
+				.andExpect(jsonPath("$.organisationRoles[0]")
+						.value("ORGANIZATION_ADMIN"));
+	}
 
 	@Test
 	void loginRefreshAndReplayUseCookiesWithoutReturningSecrets()
@@ -159,6 +247,31 @@ class BrowserSessionHttpIntegrationTests {
 				sessionRepository.findById(UUID.fromString(sessionId))
 						.orElseThrow()
 						.getStatus());
+	}
+
+	@Test
+	void authenticatedAccountCanReadOnlyItsAuthoritativeIdentity()
+			throws Exception {
+		VerifiedAccount account = verifiedAccount("current-account");
+		MvcResult login = login(account, "Identity laptop");
+		Cookie access = responseCookie(login, "SAHHA_ACCESS_TOKEN");
+
+		mockMvc.perform(get("/api/v1/auth/account").cookie(access))
+				.andExpect(status().isOk())
+				.andExpect(header().string(
+						HttpHeaders.CACHE_CONTROL,
+						containsString("no-store")))
+				.andExpect(jsonPath("$.id")
+						.value(account.userId().toString()))
+				.andExpect(jsonPath("$.email").value(account.email()))
+				.andExpect(jsonPath("$.firstName").value("Synthetic"))
+				.andExpect(jsonPath("$.lastName").value("Browser"))
+				.andExpect(jsonPath("$.status").value("ACTIVE"))
+				.andExpect(jsonPath("$.emailVerified").value(true))
+				.andExpect(jsonPath("$.passwordHash").doesNotExist());
+
+		mockMvc.perform(get("/api/v1/auth/account"))
+				.andExpect(status().isUnauthorized());
 	}
 
 	@Test

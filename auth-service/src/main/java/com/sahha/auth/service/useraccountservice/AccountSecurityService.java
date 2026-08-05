@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.sahha.auth.entity.UserAccount;
+import com.sahha.auth.dto.response.CurrentAccountResponse;
 import com.sahha.auth.entity.SecurityEventResult;
 import com.sahha.auth.entity.SecurityEventType;
 import com.sahha.auth.exception.InvalidAuthenticationException;
@@ -38,6 +39,14 @@ public class AccountSecurityService {
 		this.passwordPolicy = passwordPolicy;
 		this.sessionService = sessionService;
 		this.securityEventRecorder = securityEventRecorder;
+	}
+
+	@Transactional(readOnly = true)
+	public CurrentAccountResponse currentAccount(UUID userId) {
+		Objects.requireNonNull(userId, "userId must not be null");
+		return userRepository.findById(userId)
+				.map(CurrentAccountResponse::from)
+				.orElseThrow(InvalidAuthenticationException::new);
 	}
 
 	@Transactional(noRollbackFor = InvalidAuthenticationException.class)

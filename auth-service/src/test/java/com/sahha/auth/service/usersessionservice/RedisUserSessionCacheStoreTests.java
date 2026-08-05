@@ -135,6 +135,7 @@ class RedisUserSessionCacheStoreTests {
 				SessionStatus.ACTIVE,
 				1,
 				null,
+				java.util.List.of(),
 				NOW.plus(Duration.ofDays(7)),
 				NOW.plus(Duration.ofDays(30)),
 				2);

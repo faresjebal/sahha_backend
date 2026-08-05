@@ -54,6 +54,7 @@ public class SecurityEventRecorder {
 				result,
 				reasonCode,
 				requiredContext.sessionId(),
+				requiredContext.activeOrganisationId(),
 				MDC.get("requestId"),
 				requiredContext.ipAddress(),
 				requiredContext.userAgent(),

@@ -59,7 +59,7 @@ class UserSessionPersistenceIntegrationTests {
 		assertEquals("user_session", sessionTable);
 		assertEquals("refresh_token", tokenTable);
 		assertNotNull(flyway.info().current());
-		assertEquals("6", flyway.info().current().getVersion().getVersion());
+		assertEquals("7", flyway.info().current().getVersion().getVersion());
 	}
 
 	@Test
@@ -328,7 +328,6 @@ class UserSessionPersistenceIntegrationTests {
 			String deviceName) {
 		return UserSession.open(
 				user,
-				null,
 				deviceHash,
 				deviceName,
 				"Synthetic browser",

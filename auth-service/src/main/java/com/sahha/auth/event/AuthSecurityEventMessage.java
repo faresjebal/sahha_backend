@@ -12,6 +12,7 @@ public record AuthSecurityEventMessage(
 		String result,
 		String reasonCode,
 		UUID sessionId,
+		UUID activeOrganisationId,
 		String requestId,
 		String ipAddress,
 		String userAgent,

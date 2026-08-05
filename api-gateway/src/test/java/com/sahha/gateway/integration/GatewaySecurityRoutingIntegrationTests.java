@@ -79,6 +79,10 @@ class GatewaySecurityRoutingIntegrationTests {
 				"spring.cloud.discovery.client.simple.instances.organisation-service[0].uri",
 				() -> "http://127.0.0.1:"
 						+ ORGANISATION_SERVER.getAddress().getPort());
+		registry.add(
+				"spring.cloud.discovery.client.simple.instances.patient-service[0].uri",
+				() -> "http://127.0.0.1:"
+						+ ORGANISATION_SERVER.getAddress().getPort());
 	}
 
 	@BeforeEach
@@ -252,6 +256,139 @@ class GatewaySecurityRoutingIntegrationTests {
 		org.junit.jupiter.api.Assertions.assertEquals(
 				1,
 				UPSTREAM_REQUESTS.get());
+	}
+
+	@Test
+	void nestedOrganisationAdministratorRouteIsProtectedAndForwarded()
+			throws Exception {
+		when(jwtDecoder.decode(VALID_TOKEN)).thenReturn(
+				validJwt(VALID_TOKEN, List.of("PLATFORM_ADMIN")));
+		UUID organisationId = UUID.randomUUID();
+
+		mockMvc.perform(get(
+						"/api/v1/platform/organisations/{organisationId}/administrators",
+						organisationId)
+					.cookie(new Cookie(
+							"SAHHA_ACCESS_TOKEN",
+							VALID_TOKEN)))
+				.andExpect(status().isOk());
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/platform/organisations/" + organisationId
+						+ "/administrators",
+				LAST_UPSTREAM_PATH.get());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				List.of("SAHHA_ACCESS_TOKEN=" + VALID_TOKEN),
+				UPSTREAM_COOKIES);
+	}
+
+	@Test
+	void authenticatedOrganisationContextRouteIsForwardedWithoutPlatformRole()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(
+				validJwt(USER_TOKEN, List.of()));
+
+		mockMvc.perform(get("/api/v1/organisations/memberships")
+					.cookie(new Cookie(
+							"SAHHA_ACCESS_TOKEN",
+							USER_TOKEN)))
+				.andExpect(status().isOk());
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/organisations/memberships",
+				LAST_UPSTREAM_PATH.get());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				List.of("SAHHA_ACCESS_TOKEN=" + USER_TOKEN),
+				UPSTREAM_COOKIES);
+	}
+
+	@Test
+	void authenticatedDepartmentRouteIsForwardedToOrganisationService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(
+				validJwt(USER_TOKEN, List.of()));
+
+		mockMvc.perform(get("/api/v1/departments")
+					.cookie(new Cookie(
+							"SAHHA_ACCESS_TOKEN",
+							USER_TOKEN)))
+				.andExpect(status().isOk());
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/departments",
+				LAST_UPSTREAM_PATH.get());
+	}
+
+	@Test
+	void authenticatedStaffInvitationRoutesAreForwardedToOrganisationService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(
+				validJwt(USER_TOKEN, List.of()));
+
+		mockMvc.perform(get("/api/v1/my/staff-invitations")
+					.cookie(new Cookie(
+							"SAHHA_ACCESS_TOKEN",
+							USER_TOKEN)))
+				.andExpect(status().isOk());
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/my/staff-invitations",
+				LAST_UPSTREAM_PATH.get());
+
+		mockMvc.perform(get("/api/v1/staff-invitations")
+					.cookie(new Cookie(
+							"SAHHA_ACCESS_TOKEN",
+							USER_TOKEN)))
+				.andExpect(status().isOk());
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/staff-invitations",
+				LAST_UPSTREAM_PATH.get());
+	}
+
+	@Test
+	void authenticatedStaffDirectoryAndDoctorProfileRoutesAreForwarded()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(
+				validJwt(USER_TOKEN, List.of()));
+
+		mockMvc.perform(get("/api/v1/staff")
+					.cookie(new Cookie(
+							"SAHHA_ACCESS_TOKEN",
+							USER_TOKEN)))
+				.andExpect(status().isOk());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/staff",
+				LAST_UPSTREAM_PATH.get());
+
+		mockMvc.perform(get("/api/v1/my/doctor-profile")
+					.cookie(new Cookie(
+							"SAHHA_ACCESS_TOKEN",
+							USER_TOKEN)))
+				.andExpect(status().isOk());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/my/doctor-profile",
+				LAST_UPSTREAM_PATH.get());
+	}
+
+	@Test
+	void authenticatedPatientRegistryRouteIsForwardedToPatientService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(
+				validJwt(USER_TOKEN, List.of()));
+
+		mockMvc.perform(get("/api/v1/patients")
+					.cookie(new Cookie(
+							"SAHHA_ACCESS_TOKEN",
+							USER_TOKEN)))
+				.andExpect(status().isOk());
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/patients",
+				LAST_UPSTREAM_PATH.get());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				List.of("SAHHA_ACCESS_TOKEN=" + USER_TOKEN),
+				UPSTREAM_COOKIES);
 	}
 
 	@Test

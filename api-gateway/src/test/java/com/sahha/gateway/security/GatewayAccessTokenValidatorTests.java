@@ -91,6 +91,9 @@ class GatewayAccessTokenValidatorTests {
 						GatewayAccessTokenValidator.PLATFORM_ROLES_CLAIM,
 						roles)
 				.claim(
+						GatewayAccessTokenValidator.ORGANISATION_ROLES_CLAIM,
+						List.of())
+				.claim(
 						GatewayAccessTokenValidator.TOKEN_TYPE_CLAIM,
 						tokenType)
 				.build();

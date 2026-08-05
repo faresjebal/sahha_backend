@@ -1,6 +1,7 @@
 package com.sahha.auth.service.usersessionservice;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -81,6 +82,30 @@ public class UserSessionCacheService {
 				.map(session -> session.isActiveFor(
 						expectedUserId,
 						expectedCredentialVersion,
+						observedAt))
+				.orElse(false);
+	}
+
+	@Transactional(readOnly = true)
+	public boolean isActiveForContext(
+			UUID sessionId,
+			UUID expectedUserId,
+			int expectedCredentialVersion,
+			UUID expectedActiveOrganisationId,
+			List<String> expectedActiveOrganisationRoles,
+			Instant observedAt) {
+		Objects.requireNonNull(
+				expectedUserId,
+				"expectedUserId must not be null");
+		Objects.requireNonNull(
+				expectedActiveOrganisationRoles,
+				"expectedActiveOrganisationRoles must not be null");
+		return find(sessionId, observedAt)
+				.map(session -> session.isActiveForContext(
+						expectedUserId,
+						expectedCredentialVersion,
+						expectedActiveOrganisationId,
+						expectedActiveOrganisationRoles,
 						observedAt))
 				.orElse(false);
 	}

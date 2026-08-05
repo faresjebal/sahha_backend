@@ -1,6 +1,6 @@
 # Sahha internship project context
 
-Last updated: 2026-07-30
+Last updated: 2026-08-05
 
 ## 1. Purpose
 
@@ -373,11 +373,18 @@ The Sahha root is now a Git repository on `main` with a Maven parent/aggregator,
 root Maven Wrapper, repository controls, and shared IntelliJ run
 configurations. The discovery module is enabled as a Eureka server on port
 `8761`, and Config Server uses a local native repository on port `8888`.
-Gateway routes Auth and its public JWKS through Eureka, validates Auth's RS256
+Gateway listens on local port `8079` and routes Auth, Organisation, and its
+public JWKS through Eureka,
+validates Auth's RS256
 access cookie, forwards browser cookies without retaining shared client state,
 and establishes the request-ID, CORS, error, header-sanitisation, and baseline
-security-header policies. Auth owns the first Flyway-backed persistence slice;
-the other domain services still have no business APIs or migrations.
+security-header policies. Auth and Organisation own verified Flyway-backed
+persistence slices. Patient now has its first administrative-registry
+migration, API, security, audit, outbox, Gateway route, and frontend
+integration in the worktree. Its PostgreSQL migrations and backend contracts
+are verified by 10 passing Patient tests plus 23 passing Gateway tests; the
+remaining Phase 3 step is a live multi-service browser workflow. The remaining
+domain services still have no business APIs or migrations.
 
 All current services have tracked, service-appropriate source and test package
 trees. Domain services use explicit controller, DTO, entity, repository,
@@ -386,7 +393,7 @@ Gateway, Discovery, and Config use smaller edge/infrastructure-specific
 structures. The rules are documented in
 `docs/BACKEND_PACKAGE_STRUCTURE.md`.
 
-Auth uses its owned `sahha_auth` database, Flyway version 6, Hibernate schema
+Auth uses its owned `sahha_auth` database, Flyway version 7, Hibernate schema
 validation, and a guarded isolated `sahha_auth_test` integration database. Its
 persistence model currently contains the global user account, account status,
 credential/lock state, verified contact timestamps, normalized-email identity,
@@ -403,7 +410,7 @@ with validated DTOs, request IDs, safe Problem Details, generic accepted
 responses, request cooldowns, and IP-aware throttling backed by Redis with a
 bounded local fallback. Account, verification-token, email, rate-limit,
 session, and outbox services are grouped by responsibility. Springdoc
-OpenAPI/Swagger now documents all fifteen implemented account and
+OpenAPI/Swagger now documents all sixteen implemented account and
 browser-session operations with synthetic examples, explicit CSRF/cookie
 requirements, safe response contracts, and a production disable switch. A
 provider-independent Spring Mail adapter targets Brevo SMTP and keeps raw
@@ -436,14 +443,31 @@ publication is acknowledgement-aware and retryable when enabled. Gateway
 performs a second coarse cryptographic/claim validation, strips spoofed client
 context, and supplies Auth with a trusted edge client address. This does not
 replace Auth's session-bound decision or future resource-service validation.
-Organisation memberships, active-organisation selection, and domain
-resource-server validation are the next identity slice.
+An authenticated user can now select an organisation only after Organisation
+Service resolves an active membership and active scoped roles from the JWT
+subject. Auth stores that validated context on the locked `UserSession`,
+updates its versioned Redis projection after commit, records the selection,
+and issues a replacement access cookie containing paired `org_id` and
+`org_roles` claims. It does not rotate the refresh token. Auth rejects the
+previous access token after a context change because its claims no longer
+match the authoritative session projection. Gateway and Organisation Service
+also reject malformed scoped claims, while resource-level membership checks
+remain inside Organisation Service.
 The CSRF bootstrap response exposes the same raw value stored in the readable
 XSRF cookie, so Swagger and the frontend can copy the response token directly
 into the configured header.
 Organisation-scoped roles remain owned by Organisation Service. Patient
-retains the temporary database-free scaffold configuration until its vertical
-slice begins.
+Service now models a global stable identity separately from each
+organisation-owned registration and contact projection. Submitted national ID
+or passport values are normalised into a keyed HMAC fingerprint and last-four
+mask; raw values are never persisted or returned. Administrative access
+requires a receptionist or Organisation Administrator claim and a live
+Organisation Service membership decision. Duplicate checks combine exact
+strong-identifier matching with weighted name/date-of-birth, phone, and email
+candidates; creation requires an explicit decision when candidates exist.
+Administrative writes use optimistic versions, append-only local audit rows,
+and a minimal transactional outbox. This implementation remains unverified
+until its pending Maven/PostgreSQL suite passes.
 
 Organisation Service now owns a Flyway-backed organisation profile with type,
 active/suspended status, contact and address data, audit metadata, and
@@ -456,14 +480,38 @@ Auth issuer, audience, access-token claims, role, and cookie/CSRF pair itself
 even when Gateway has already performed its coarse edge check. Its integration
 tests use the isolated `organisation_test` schema inside the service-owned
 database.
+Organisation Service also owns organisation memberships and their independently
+assignable roles. A global Platform Administrator can assign the first
+`ORGANIZATION_ADMIN` by exact account email. Organisation Service resolves the
+identity through an Eureka-aware Auth Service client using only the current
+short-lived access credential; it never queries or changes Auth's database.
+Only active, email-verified accounts are eligible. The local membership stores
+the immutable Auth user ID plus display-only email/name snapshots, while the
+role remains scoped to that organisation. Assignment atomically persists the
+membership, active role, target-aware append-only audit record, and a
+secret-free outbox event. Duplicate organisation/user membership is prevented
+by both domain logic and a database unique constraint.
+Authenticated users can list their eligible contexts at
+`GET /api/v1/organisations/memberships` and resolve one at
+`GET /api/v1/organisations/{organisationId}/membership-context`. Suspended
+memberships, suspended organisations, memberships with no active role, and
+contexts belonging to another user are not returned.
+The Platform Administrator React directory now loads, reads, searches, and
+creates those organisations through API Gateway using typed contracts,
+TanStack Query cache invalidation, validated React Hook Form/Zod input, and
+safe 401/403/409 feedback. The selected organisation also lists and reads its
+administrator memberships and can assign an eligible existing Sahha user by
+email, with safe identity-directory and eligibility failures. Its Gateway URL
+remains environment-configurable so local port changes do not leak into
+feature code.
 
 The local PostgreSQL `18.1` server on port `5432` now contains a separate
 database and restricted login owner for every stateful service. Public database
 access is revoked, own-service connectivity passes, and cross-service
 connectivity is denied. Generated development connection settings live only in
 the gitignored `.env.database.local`. Services are not connected to these
-databases until their Flyway-backed vertical slice begins; Auth is the first
-connected exception.
+databases until their Flyway-backed vertical slice begins; Auth, Organisation,
+and the in-progress Patient slice are connected.
 
 ### Existing frontend
 
@@ -481,6 +529,16 @@ Useful assets already present:
 - Real Gateway-backed patient registration, email verification, login,
   cookie-session refresh/renewal, and logout, independently selectable from
   the still-mocked domain services.
+- A real Gateway-backed Platform Administrator organisation directory,
+  creation form, and Organisation Administrator assignment panel using the
+  Organisation Service contracts.
+- A dedicated role-safe administrative patient model and Gateway REST adapter,
+  with TanStack Query receptionist directory/detail screens and a duplicate-
+  review registration form. Its component/service tests and production build
+  pass; live backend verification remains pending.
+- A real active-organisation selector that maps canonical organisation roles
+  to the existing role workspaces and synchronises changed context across
+  browser tabs.
 - An integration document covering cookies, REST errors, gateway usage, and
   backend enforcement.
 
@@ -493,11 +551,16 @@ Integration gaps and scope mismatches:
 - `src/App.tsx` is large and should be split incrementally by active feature.
 - Several rich workflows still use browser-persistent mock state.
 - The REST service container covers only part of the visible UI.
-- The current dependency set now includes React Hook Form and Zod for active
-  authentication forms. TanStack Query and a STOMP client remain pending.
-- Frontend `Patient` objects mix administrative and clinical fields, which is
-  unsafe as a backend response shape for receptionists.
-- Current role names must be mapped to the canonical V1 organisation roles.
+- The current dependency set includes React Hook Form and Zod for validated
+  forms and TanStack Query for Organisation Service state. A STOMP client
+  remains pending.
+- Legacy mock doctor/patient workspaces still use a combined presentation
+  `Patient` object, but receptionist APIs and screens now use a separate
+  administrative-only model. Later Clinical integration must replace the
+  legacy object with an explicit clinical projection rather than reusing the
+  administrative contract.
+- Deferred frontend roles still need canonical V1 mappings as their backend
+  slices are implemented.
 - Current IDs and several DTOs are presentation-oriented and need stable API
   contracts.
 

@@ -124,6 +124,7 @@ class AuthOutboxPublisherTests {
 				SecurityEventResult.SUCCESS,
 				null,
 				null,
+				null,
 				"request-12345",
 				"192.0.2.10",
 				"Synthetic browser",
