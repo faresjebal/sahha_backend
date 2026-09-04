@@ -1,5 +1,9 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="File Service" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <envs>
+      <env name="FILE_OUTBOX_PUBLISHER_ENABLED" value="true" />
+      <env name="KAFKA_BOOTSTRAP_SERVERS" value="localhost:9092" />
+    </envs>
     <module name="file-service" />
     <option name="SPRING_BOOT_MAIN_CLASS" value="com.sahha.file.FileServiceApplication" />
     <option name="ACTIVE_PROFILES" value="local" />

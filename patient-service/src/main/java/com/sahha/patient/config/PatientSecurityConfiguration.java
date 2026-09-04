@@ -105,6 +105,8 @@ public class PatientSecurityConfiguration {
 								"/swagger-ui.html",
 								"/swagger-ui/**")
 						.permitAll()
+						.requestMatchers("/api/v1/patients/me/**")
+						.authenticated()
 						.requestMatchers("/api/v1/patients/**", "/api/v1/patients")
 						.hasAnyRole("ORGANIZATION_ADMIN", "RECEPTIONIST")
 						.anyRequest()

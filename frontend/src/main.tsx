@@ -12,6 +12,8 @@ import App from './App'
 import './styles.css'
 import './styles/quality-pass.css'
 import './styles/workflows.css'
+import './styles/clinical.css'
+import './styles/communication.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode><AppErrorBoundary><QueryClientProvider client={queryClient}><BrowserRouter><NavigationEffects/><AuthProvider><DemoDataProvider><WorkflowProvider><App /></WorkflowProvider></DemoDataProvider></AuthProvider></BrowserRouter></QueryClientProvider></AppErrorBoundary></StrictMode>,

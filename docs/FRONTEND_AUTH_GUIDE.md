@@ -128,9 +128,11 @@ npm.cmd run validate:ui
 Verified result:
 
 - TypeScript: passed.
-- Vitest: 4 files, 16 tests passed.
+- Vitest: 27 files, 81 tests passed.
 - Production build: passed.
-- Browser layout suite: 11 checks passed, including registration at 375 px.
+- Browser layout suite: 11 checks passed, including registration at 375 px,
+  consistent Sahha branding, keyboard entry, drawer behaviour, and no
+  document-level horizontal overflow.
 
 With the four local applications running, this reusable non-mutating check
 submits only an unknown login and does not create a user:
@@ -138,6 +140,28 @@ submits only an unknown login and does not create a user:
 ```powershell
 npm.cmd run smoke:auth
 ```
+
+To verify the real doctor and receptionist browser workspaces from the
+repository root, use the secure wrapper after the full local stack and frontend
+are running:
+
+```powershell
+Set-Location C:\Users\LENOVO\Desktop\sahha
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\performance\Test-SahhaFrontendRoles.ps1
+```
+
+The wrapper prompts separately for both synthetic account passwords, passes
+them to the child process only for the duration of the check, and removes the
+environment values afterward. The check signs in through the real UI, selects
+an organisation if required, verifies six doctor/receptionist route and
+viewport combinations, checks the doctor notification panel, writes sanitized
+screenshots under the temporary directory, and logs both sessions out. It does
+not create or modify patients, availability, appointments, or notifications.
+
+Verified on 2026-08-24: all six doctor/receptionist scenarios passed at 1440,
+1024, and 375 px. Every body/document width matched its viewport, every title
+used the Sahha suffix, Sahha branding was visible, the doctor notification panel
+fit the phone viewport, and the reported API-error count was zero.
 
 ## Troubleshooting
 

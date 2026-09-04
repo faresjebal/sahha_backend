@@ -105,6 +105,48 @@ public class PatientProblemDetailsHandler {
 						request));
 	}
 
+	@ExceptionHandler(PatientAccountLinkNotFoundException.class)
+	ResponseEntity<ProblemDetail> accountLinkNotFound(
+			PatientAccountLinkNotFoundException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.NOT_FOUND,
+				problem(
+						HttpStatus.NOT_FOUND,
+						"Patient account link not found",
+						"The verified account could not be matched to an owned patient registration.",
+						"urn:sahha:problem:patient-account-link-not-found",
+						request));
+	}
+
+	@ExceptionHandler(PatientAccountLinkConflictException.class)
+	ResponseEntity<ProblemDetail> accountLinkConflict(
+			PatientAccountLinkConflictException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.CONFLICT,
+				problem(
+						HttpStatus.CONFLICT,
+						"Patient account link conflict",
+						"This account or patient identity is already linked differently.",
+						"urn:sahha:problem:patient-account-link-conflict",
+						request));
+	}
+
+	@ExceptionHandler(AuthAccountUnavailableException.class)
+	ResponseEntity<ProblemDetail> authAccountUnavailable(
+			AuthAccountUnavailableException exception,
+			HttpServletRequest request) {
+		return response(
+				HttpStatus.SERVICE_UNAVAILABLE,
+				problem(
+						HttpStatus.SERVICE_UNAVAILABLE,
+						"Account verification unavailable",
+						"The account identity could not be verified. Try again later.",
+						"urn:sahha:problem:auth-account-unavailable",
+						request));
+	}
+
 	@ExceptionHandler(PossibleDuplicateException.class)
 	ResponseEntity<ProblemDetail> duplicateReviewRequired(
 			PossibleDuplicateException exception,

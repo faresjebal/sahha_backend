@@ -1,0 +1,8 @@
+package com.sahha.clinical.entity;
+
+public enum ClinicalAuditEventType {
+	CONSULTATION_DRAFT_CREATED,
+	CONSULTATION_DRAFT_UPDATED,
+	CONSULTATION_FINALIZED,
+	CONSULTATION_CORRECTED
+}

@@ -138,3 +138,24 @@ export interface PatientAdministrativePageResource {
   totalElements: number
   totalPages: number
 }
+
+export interface LinkPatientAccountCommand {
+  organisationId: string
+  medicalRecordNumber: string
+  dateOfBirth: string
+}
+
+export interface PatientAccountLinkResource {
+  linkId: string
+  authUserId: string
+  linkedAt: string
+}
+
+export interface MyPatientRegistrationResource {
+  registrationId: string
+  organisationId: string
+  medicalRecordNumber: string
+  status: 'ACTIVE' | 'INACTIVE'
+  firstName: string
+  lastName: string
+}

@@ -63,6 +63,34 @@ public interface OrganisationMembershipRepository
 						 OrganisationMembershipRole assignment
 					where assignment.membershipId = membership.id
 					  and membership.organisationId = :organisationId
+					  and membership.status = :status
+					  and assignment.role = :role
+					  and assignment.active = true
+					order by membership.displayNameSnapshot, membership.id
+					""",
+			countQuery = """
+					select count(distinct membership.id)
+					from OrganisationMembership membership,
+						 OrganisationMembershipRole assignment
+					where assignment.membershipId = membership.id
+					  and membership.organisationId = :organisationId
+					  and membership.status = :status
+					  and assignment.role = :role
+					  and assignment.active = true
+					""")
+	Page<OrganisationMembership> findActiveCollaborationDoctors(
+			@Param("organisationId") UUID organisationId,
+			@Param("status") OrganisationMembershipStatus status,
+			@Param("role") OrganisationRole role,
+			Pageable pageable);
+
+	@Query(
+			value = """
+					select distinct membership
+					from OrganisationMembership membership,
+						 OrganisationMembershipRole assignment
+					where assignment.membershipId = membership.id
+					  and membership.organisationId = :organisationId
 					  and assignment.role in :roles
 					""",
 			countQuery = """

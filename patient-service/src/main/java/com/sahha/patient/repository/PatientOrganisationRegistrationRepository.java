@@ -26,6 +26,16 @@ public interface PatientOrganisationRegistrationRepository
 			findByOrganisationIdAndPatientId(UUID organisationId, UUID patientId);
 
 	@EntityGraph(attributePaths = "patient")
+	Optional<PatientOrganisationRegistration>
+			findByOrganisationIdAndMedicalRecordNumber(
+					UUID organisationId,
+					String medicalRecordNumber);
+
+	@EntityGraph(attributePaths = "patient")
+	List<PatientOrganisationRegistration> findAllByPatientIdOrderByCreatedAt(
+			UUID patientId);
+
+	@EntityGraph(attributePaths = "patient")
 	List<PatientOrganisationRegistration> findAllByNormalizedPhoneNumber(
 			String normalizedPhoneNumber);
 

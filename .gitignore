@@ -27,6 +27,7 @@ frontend/*.tsbuildinfo
 !.env.mail.example
 !.env.redis.example
 !frontend/.env.example
+config/seaweedfs/*.local.json
 
 # Local infrastructure state
 infrastructure/data/

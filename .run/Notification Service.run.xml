@@ -1,9 +1,14 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Notification Service" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
-    <module name="notification-service" />
-    <option name="SPRING_BOOT_MAIN_CLASS" value="com.sahha.notification.NotificationServiceApplication" />
     <option name="ACTIVE_PROFILES" value="local" />
+    <envs>
+      <env name="KAFKA_BOOTSTRAP_SERVERS" value="localhost:9092" />
+      <env name="NOTIFICATION_APPOINTMENT_CONSUMER_ENABLED" value="true" />
+      <env name="NOTIFICATION_COMMUNICATION_CONSUMER_ENABLED" value="true" />
+    </envs>
+    <module name="notification-service" />
     <option name="SHORTEN_COMMAND_LINE" value="ARGS_FILE" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.sahha.notification.NotificationServiceApplication" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>

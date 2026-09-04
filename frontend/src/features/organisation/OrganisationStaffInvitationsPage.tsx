@@ -12,12 +12,12 @@ import {
   ShieldCheck,
   UserPlus,
   UserRound,
-  X,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useAuth } from '../../app/auth/AuthProvider'
+import { ManagementDrawer } from '../../components/forms/ManagementDrawer'
 import type {
   CreateStaffInvitationCommand,
   StaffInvitationPageResource,
@@ -160,16 +160,22 @@ export function OrganisationStaffInvitationsPage() {
 
     {notice&&<div className="inline-success" role="status"><Check/>{notice}</div>}
 
-    {composerOpen&&<form className="order-composer compact-composer staff-invitation-composer" onSubmit={submit} noValidate>
-      <header><div><p className="eyebrow">Minimum necessary access</p><h2>Create a staff invitation</h2></div><button type="button" className="icon-button" aria-label="Close invitation form" onClick={()=>setComposerOpen(false)}><X/></button></header>
+    <ManagementDrawer
+      open={composerOpen}
+      onClose={()=>setComposerOpen(false)}
+      title="Create a staff invitation"
+      eyebrow="Minimum necessary access"
+      copy="Invite one verified account to one bounded organisation role."
+      icon={<UserPlus/>}
+    ><form className="management-form" onSubmit={submit} noValidate>
       <p className="tenant-create__notice"><ShieldCheck/>The person must sign in with this exact verified email. The form never searches or exposes Sahha accounts.</p>
-      <div className="order-fields">
+      <div className="management-fields">
         <label><span>Staff email</span><input type="email" {...register('email')} aria-invalid={Boolean(errors.email)} placeholder="doctor@example.com"/>{errors.email&&<small className="login-field-error" role="alert">{errors.email.message}</small>}</label>
         <label><span>Organisation role</span><select {...register('role')}><option value="DOCTOR">Doctor</option><option value="RECEPTIONIST">Receptionist</option></select></label>
       </div>
       {createInvitation.isError&&<p className="form-message form-message--error" role="alert">{errorMessage(createInvitation.error, 'The invitation could not be created.')}</p>}
       <footer><button type="button" className="secondary" onClick={()=>setComposerOpen(false)}>Cancel</button><button className="primary" disabled={createInvitation.isPending}>{createInvitation.isPending?<><LoaderCircle className="spin"/>Creating…</>:<><Mail/>Create invitation</>}</button></footer>
-    </form>}
+    </form></ManagementDrawer>
 
     <section className="staff-invitation-boundary"><ShieldCheck/><span><strong>Identity remains private</strong><small>Organisation administrators submit an email but cannot query the Auth account directory. Acceptance is checked server-side against the signed-in account.</small></span></section>
 

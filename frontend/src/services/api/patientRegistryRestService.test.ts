@@ -124,4 +124,35 @@ describe('Gateway patient registry REST integration', () => {
     expect(JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body)))
       .toEqual(command)
   })
+
+  it('links and lists only the current patient account registrations', async () => {
+    const linkCommand = {
+      organisationId:'organisation-1',
+      medicalRecordNumber:'PT-12AB34CD56EF',
+      dateOfBirth:'1990-04-12',
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({
+        headerName:'X-XSRF-TOKEN', parameterName:'_csrf', token:'link-csrf',
+      }))
+      .mockResolvedValueOnce(response({
+        linkId:'link-1', authUserId:'user-1', linkedAt:'2026-08-14T02:00:00Z',
+      }, 201))
+      .mockResolvedValueOnce(response([{
+        registrationId:'registration-1', organisationId:'organisation-1',
+        medicalRecordNumber:'PT-12AB34CD56EF', status:'ACTIVE',
+        firstName:'Amina', lastName:'Ben Salem',
+      }]))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await patientRegistryRestService.linkMyAccount(linkCommand)
+    await patientRegistryRestService.listMyRegistrations()
+
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      `${env.apiBaseUrl}/patients/me/account-link`,
+    )
+    expect(fetchMock.mock.calls[2][0]).toBe(
+      `${env.apiBaseUrl}/patients/me/registrations`,
+    )
+  })
 })

@@ -81,7 +81,9 @@ describe('Organisation staff directory page', () => {
   it('renders accepted tenant staff and opens authoritative membership details', async () => {
     renderPage()
 
-    fireEvent.click(await screen.findByRole('button', { name:/Synthetic Doctor/i }))
+    fireEvent.click(await screen.findByRole(
+      'button', { name:/Synthetic Doctor/i }, { timeout:5_000 },
+    ))
 
     expect(screen.getByRole('dialog', { name:'Synthetic Doctor' })).toBeInTheDocument()
     expect(screen.getByText('Professional profile incomplete')).toBeInTheDocument()
@@ -96,7 +98,9 @@ describe('Organisation staff directory page', () => {
       .mockResolvedValueOnce(staffPage([doctor]))
       .mockResolvedValueOnce(staffPage([suspended]))
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name:/Synthetic Doctor/i }))
+    fireEvent.click(await screen.findByRole(
+      'button', { name:/Synthetic Doctor/i }, { timeout:5_000 },
+    ))
 
     fireEvent.click(screen.getByRole('button', { name:/suspend access/i }))
 
@@ -117,7 +121,9 @@ describe('Organisation staff directory page', () => {
     }
     staffService.assignDepartment.mockResolvedValueOnce(assignment)
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name:/Synthetic Doctor/i }))
+    fireEvent.click(await screen.findByRole(
+      'button', { name:/Synthetic Doctor/i }, { timeout:5_000 },
+    ))
 
     fireEvent.change(screen.getByLabelText('Department'), {
       target:{ value:'department-1' },

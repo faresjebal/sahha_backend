@@ -20,7 +20,7 @@ describe('role-aware demo authentication', () => {
 
   it('preserves the private-versus-hospital doctor distinction', async () => {
     const session = await mockServices.auth.login({
-      email:'mara.v@aegis.health',
+      email:'mara.v@sahha.health',
       password:'demo-password',
       demoRole:'doctor',
       demoDoctorType:'HOSPITAL',

@@ -33,10 +33,9 @@ public class AuthAccountDirectoryClient {
 		Objects.requireNonNull(accessToken, "accessToken must not be null");
 		try {
 			AuthAccountResource resource = restClient.get()
-					.uri(builder -> builder
-							.path("/api/v1/auth/platform/accounts")
-							.queryParam("email", email)
-							.build())
+					.uri(
+							"/api/v1/auth/platform/accounts?email={email}",
+							email)
 					.header(
 						HttpHeaders.COOKIE,
 						accessTokenCookieName + "=" + accessToken)

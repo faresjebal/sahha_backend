@@ -118,15 +118,7 @@ const ACCESS_REFRESH_LEEWAY_MS = 30_000
 const authMutation = async <T,>(
   path: string,
   body?: unknown,
-): Promise<T> => {
-  try {
-    return await httpClient.request<T>(path, { method:'POST', body })
-  } catch (error) {
-    if (!(error instanceof ApiError) || error.problem.status !== 403) throw error
-    httpClient.invalidateCsrfToken()
-    return httpClient.request<T>(path, { method:'POST', body })
-  }
-}
+): Promise<T> => httpClient.request<T>(path, { method:'POST', body })
 
 const isAuthenticationRequired = (error: unknown) =>
   error instanceof ApiError && error.problem.status === 401

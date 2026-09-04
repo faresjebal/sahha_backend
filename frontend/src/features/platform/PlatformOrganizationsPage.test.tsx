@@ -121,15 +121,15 @@ describe('Platform Administrator organisations page', () => {
     renderPage()
     await screen.findAllByText('Sahha Clinic Tunis')
 
-    fireEvent.click(screen.getByRole('button', { name:'Add organization' }))
-    fireEvent.change(screen.getByLabelText('Organization name'), { target:{ value:'Carthage Medical Centre' } })
-    fireEvent.change(screen.getByLabelText(/Organization type/), { target:{ value:'HOSPITAL' } })
+    fireEvent.click(screen.getByRole('button', { name:'Add organisation' }))
+    fireEvent.change(screen.getByLabelText('Organisation name'), { target:{ value:'Carthage Medical Centre' } })
+    fireEvent.change(screen.getByLabelText(/Organisation type/), { target:{ value:'HOSPITAL' } })
     fireEvent.change(screen.getByLabelText('Contact email'), { target:{ value:'admin@carthage.test' } })
     fireEvent.change(screen.getByLabelText('Phone number'), { target:{ value:'+21671000000' } })
     fireEvent.change(screen.getByLabelText('Street address'), { target:{ value:'20 Carthage Road' } })
     fireEvent.change(screen.getByLabelText('City'), { target:{ value:'Carthage' } })
     fireEvent.change(screen.getByLabelText('Region'), { target:{ value:'Tunis' } })
-    fireEvent.click(screen.getByRole('button', { name:'Create organization' }))
+    fireEvent.click(screen.getByRole('button', { name:'Create organisation' }))
 
     await waitFor(() => expect(organisationService.create).toHaveBeenCalledWith({
       name:'Carthage Medical Centre',
@@ -159,7 +159,7 @@ describe('Platform Administrator organisations page', () => {
       .toBeInTheDocument()
   })
 
-  it('assigns an existing account as the selected organization administrator', async () => {
+  it('assigns an existing account as the selected organisation administrator', async () => {
     organisationService.listAdministrators
       .mockResolvedValueOnce({ items:[], page:0, size:20, totalElements:0, totalPages:0 })
       .mockResolvedValueOnce({ items:[administrator], page:0, size:20, totalElements:1, totalPages:1 })

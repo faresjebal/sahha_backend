@@ -3,7 +3,6 @@ package com.sahha.gateway.config;
 import java.time.Duration;
 import java.util.List;
 
-import jakarta.servlet.DispatcherType;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,23 +10,22 @@ import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverterAdapter;
+import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.web.server.header.ReferrerPolicyServerHttpHeadersWriter;
 import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.cors.reactive.CorsConfigurationSource;
+import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
+import reactor.core.publisher.Mono;
 import tools.jackson.databind.ObjectMapper;
 
 import com.sahha.gateway.security.GatewayAccessTokenCookieResolver;
@@ -40,8 +38,8 @@ import com.sahha.gateway.security.GatewaySecurityProblemWriter;
 public class GatewaySecurityConfiguration {
 
 	@Bean
-	JwtDecoder gatewayJwtDecoder(GatewaySecurityProperties properties) {
-		NimbusJwtDecoder decoder = NimbusJwtDecoder
+	ReactiveJwtDecoder gatewayJwtDecoder(GatewaySecurityProperties properties) {
+		NimbusReactiveJwtDecoder decoder = NimbusReactiveJwtDecoder
 				.withJwkSetUri(properties.jwkSetUri().toString())
 				.jwsAlgorithm(SignatureAlgorithm.RS256)
 				.build();
@@ -59,27 +57,23 @@ public class GatewaySecurityConfiguration {
 														"The access token is invalid.",
 														null));
 		decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-				List.of(
-						issuer,
-						audience,
-						new GatewayAccessTokenValidator())));
+				List.of(issuer, audience, new GatewayAccessTokenValidator())));
 		return decoder;
 	}
 
 	@Bean
-	BearerTokenResolver gatewayBearerTokenResolver(
+	GatewayAccessTokenCookieResolver gatewayBearerTokenConverter(
 			GatewaySecurityProperties properties) {
 		return new GatewayAccessTokenCookieResolver(properties);
 	}
 
 	@Bean
-	Converter<Jwt, AbstractAuthenticationToken>
+	Converter<Jwt, Mono<AbstractAuthenticationToken>>
 			gatewayJwtAuthenticationConverter() {
-		JwtAuthenticationConverter converter =
-				new JwtAuthenticationConverter();
+		JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
 		converter.setJwtGrantedAuthoritiesConverter(
 				new GatewayPlatformRoleConverter());
-		return converter;
+		return new ReactiveJwtAuthenticationConverterAdapter(converter);
 	}
 
 	@Bean
@@ -98,6 +92,8 @@ public class GatewaySecurityConfiguration {
 				HttpHeaders.CONTENT_TYPE,
 				HttpHeaders.ACCEPT,
 				"X-XSRF-TOKEN",
+				"X-Upload-Token",
+				"X-Download-Token",
 				"X-Request-ID"));
 		configuration.setExposedHeaders(List.of(
 				"X-Request-ID",
@@ -111,31 +107,28 @@ public class GatewaySecurityConfiguration {
 	}
 
 	@Bean
-	SecurityFilterChain gatewaySecurityFilterChain(
-			HttpSecurity http,
-			JwtDecoder jwtDecoder,
-			BearerTokenResolver bearerTokenResolver,
-			Converter<Jwt, AbstractAuthenticationToken>
+	SecurityWebFilterChain gatewaySecurityWebFilterChain(
+			ServerHttpSecurity http,
+			ReactiveJwtDecoder jwtDecoder,
+			GatewayAccessTokenCookieResolver bearerTokenConverter,
+			Converter<Jwt, Mono<AbstractAuthenticationToken>>
 					jwtAuthenticationConverter,
 			CorsConfigurationSource gatewayCorsConfigurationSource,
-			ObjectMapper objectMapper)
-			throws Exception {
+			ObjectMapper objectMapper) {
 		GatewaySecurityProblemWriter problemWriter =
 				new GatewaySecurityProblemWriter(objectMapper);
 		http
-				.authorizeHttpRequests(authorize -> authorize
-						.dispatcherTypeMatchers(DispatcherType.ERROR)
-						.permitAll()
-						.requestMatchers(
+				.authorizeExchange(authorize -> authorize
+						.pathMatchers(
 								"/actuator/health",
 								"/actuator/health/**")
 						.permitAll()
-						.requestMatchers(
+						.pathMatchers(
 								HttpMethod.GET,
 								"/.well-known/jwks.json",
 								"/api/v1/auth/csrf")
 						.permitAll()
-						.requestMatchers(
+						.pathMatchers(
 								HttpMethod.POST,
 								"/api/v1/auth/registrations",
 								"/api/v1/auth/email-verifications/confirm",
@@ -145,56 +138,45 @@ public class GatewaySecurityConfiguration {
 								"/api/v1/auth/login",
 								"/api/v1/auth/refresh")
 						.permitAll()
-						.requestMatchers(HttpMethod.OPTIONS, "/**")
+						.pathMatchers(HttpMethod.OPTIONS, "/**")
 						.permitAll()
-						.requestMatchers("/api/v1/platform/**")
+						.pathMatchers("/api/v1/platform/**")
 						.hasRole("PLATFORM_ADMIN")
-						.requestMatchers("/api/v1/**")
+						.pathMatchers("/api/v1/**")
 						.authenticated()
-						.anyRequest()
+						.anyExchange()
 						.denyAll())
 				.cors(cors -> cors.configurationSource(
 						gatewayCorsConfigurationSource))
-				.csrf(AbstractHttpConfigurer::disable)
-				.sessionManagement(session -> session
-						.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+				.csrf(ServerHttpSecurity.CsrfSpec::disable)
 				.oauth2ResourceServer(resourceServer -> resourceServer
-						.bearerTokenResolver(bearerTokenResolver)
+						.bearerTokenConverter(bearerTokenConverter)
 						.jwt(jwt -> jwt
-								.decoder(jwtDecoder)
+								.jwtDecoder(jwtDecoder)
 								.jwtAuthenticationConverter(
 										jwtAuthenticationConverter))
 						.authenticationEntryPoint(
-								(request, response, exception) ->
-										problemWriter.unauthorized(
-												request,
-												response)))
+								(exchange, exception) ->
+										problemWriter.unauthorized(exchange)))
 				.exceptionHandling(exceptions -> exceptions
 						.authenticationEntryPoint(
-								(request, response, exception) ->
-										problemWriter.unauthorized(
-												request,
-												response))
+								(exchange, exception) ->
+										problemWriter.unauthorized(exchange))
 						.accessDeniedHandler(
-								(request, response, exception) ->
-										problemWriter.forbidden(
-												request,
-												response)))
+								(exchange, exception) ->
+										problemWriter.forbidden(exchange)))
 				.headers(headers -> headers
-						.frameOptions(frame -> frame.deny())
 						.contentSecurityPolicy(csp -> csp.policyDirectives(
 								"default-src 'none'; frame-ancestors 'none'; base-uri 'none'"))
 						.referrerPolicy(referrer -> referrer.policy(
-								ReferrerPolicyHeaderWriter.ReferrerPolicy
+								ReferrerPolicyServerHttpHeadersWriter.ReferrerPolicy
 										.NO_REFERRER))
-						.permissionsPolicyHeader(permissions -> permissions
-								.policy(
-										"camera=(), microphone=(), geolocation=()")))
-				.formLogin(AbstractHttpConfigurer::disable)
-				.httpBasic(AbstractHttpConfigurer::disable)
-				.logout(AbstractHttpConfigurer::disable)
-				.requestCache(AbstractHttpConfigurer::disable);
+						.permissionsPolicy(permissions -> permissions.policy(
+								"camera=(), microphone=(), geolocation=()")))
+				.httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
+				.formLogin(ServerHttpSecurity.FormLoginSpec::disable)
+				.logout(ServerHttpSecurity.LogoutSpec::disable)
+				.requestCache(ServerHttpSecurity.RequestCacheSpec::disable);
 		return http.build();
 	}
-
 }

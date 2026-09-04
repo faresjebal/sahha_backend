@@ -9,6 +9,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +18,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.test.web.client.RequestMatcher;
 import org.springframework.web.client.RestClient;
 
 import com.sahha.organisation.client.auth.AuthAccountDirectoryClient;
@@ -47,8 +50,7 @@ class AuthAccountDirectoryClientTests {
 
 	@Test
 	void forwardsOnlyTheShortLivedAccessCredentialAndResolvesIdentity() {
-		server.expect(requestTo(
-					"http://auth-service/api/v1/auth/platform/accounts?email=admin@example.test"))
+		server.expect(directoryRequestFor("admin@example.test"))
 				.andExpect(method(HttpMethod.GET))
 				.andExpect(header(
 						HttpHeaders.COOKIE,
@@ -75,8 +77,7 @@ class AuthAccountDirectoryClientTests {
 
 	@Test
 	void convertsUnknownIdentityToSafeMembershipNotFound() {
-		server.expect(requestTo(
-					"http://auth-service/api/v1/auth/platform/accounts?email=missing@example.test"))
+		server.expect(directoryRequestFor("missing@example.test"))
 				.andRespond(withResourceNotFound());
 
 		assertThrows(
@@ -84,6 +85,32 @@ class AuthAccountDirectoryClientTests {
 				() -> client.findByEmail(
 						"missing@example.test",
 						"aaa.bbb.ccc"));
+		server.verify();
+	}
+
+	@Test
+	void percentEncodesGmailPlusAliasBeforeResolvingIdentity() {
+		server.expect(directoryRequestFor(
+					"ffaresjebali+sahha-org-admin@gmail.com"))
+				.andExpect(method(HttpMethod.GET))
+				.andRespond(withSuccess("""
+						{
+						  "id":"0ce89700-962e-41a1-b298-8ff7b17f0b5c",
+						  "email":"ffaresjebali+sahha-org-admin@gmail.com",
+						  "firstName":"Amal",
+						  "lastName":"Mansour",
+						  "status":"ACTIVE",
+						  "emailVerified":true
+						}
+						""", MediaType.APPLICATION_JSON));
+
+		AuthAccountResource account = client.findByEmail(
+				"ffaresjebali+sahha-org-admin@gmail.com",
+				"aaa.bbb.ccc");
+
+		assertEquals(
+				"ffaresjebali+sahha-org-admin@gmail.com",
+				account.email());
 		server.verify();
 	}
 
@@ -111,5 +138,20 @@ class AuthAccountDirectoryClientTests {
 		assertEquals("doctor@example.test", account.email());
 		assertEquals(true, account.eligibleForMembership());
 		server.verify();
+	}
+
+	private static RequestMatcher directoryRequestFor(String expectedEmail) {
+		return request -> {
+			URI uri = request.getURI();
+			assertEquals(
+					"/api/v1/auth/platform/accounts",
+					uri.getPath());
+			String rawQuery = uri.getRawQuery();
+			assertEquals(
+					expectedEmail,
+					URLDecoder.decode(
+							rawQuery.substring("email=".length()),
+							StandardCharsets.UTF_8));
+		};
 	}
 }

@@ -45,12 +45,20 @@ public final class PatientAccessTokenValidator
 			}
 			Object organisationRoles = token.getClaims().get(
 					ORGANISATION_ROLES_CLAIM);
-			if (!validRoles(organisationRoles)
-					|| ((Collection<?>) organisationRoles).isEmpty()) {
+			if (!validRoles(organisationRoles)) {
 				return failure();
 			}
-			UUID.fromString(token.getClaimAsString(
-					ACTIVE_ORGANISATION_ID_CLAIM));
+			boolean hasRoles = !((Collection<?>) organisationRoles).isEmpty();
+			String organisationId = token.getClaimAsString(
+					ACTIVE_ORGANISATION_ID_CLAIM);
+			boolean hasOrganisation = organisationId != null
+					&& !organisationId.isBlank();
+			if (hasRoles != hasOrganisation) {
+				return failure();
+			}
+			if (hasOrganisation) {
+				UUID.fromString(organisationId);
+			}
 			return OAuth2TokenValidatorResult.success();
 		}
 		catch (RuntimeException invalidClaim) {

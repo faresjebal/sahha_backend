@@ -118,8 +118,15 @@ public class OrganisationSecurityConfiguration {
 						.requestMatchers(
 								HttpMethod.GET,
 								"/api/v1/organisations/memberships",
-								"/api/v1/organisations/*/membership-context")
+								"/api/v1/organisations/*/membership-context",
+								"/api/v1/organisations/*/scheduling-doctors/*",
+								"/api/v1/organisations/*/patient-doctors/*")
 						.authenticated()
+						.requestMatchers(
+								HttpMethod.GET,
+								"/api/v1/organisations/*/collaboration-doctors",
+								"/api/v1/organisations/*/collaboration-doctors/*")
+						.hasRole("DOCTOR")
 						.requestMatchers("/api/v1/departments/**")
 						.hasRole("ORGANIZATION_ADMIN")
 						.requestMatchers("/api/v1/staff-invitations/**")

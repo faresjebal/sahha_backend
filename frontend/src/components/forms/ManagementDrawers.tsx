@@ -1,42 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { Building2, CalendarDays, Check, Stethoscope, UserPlus, X } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Building2, CalendarDays, Check, Stethoscope, UserPlus } from 'lucide-react'
 import { useDemoData } from '../../app/data/DemoDataProvider'
-
-interface DrawerProps {
-  open: boolean
-  onClose(): void
-  title: string
-  eyebrow: string
-  copy: string
-  icon: ReactNode
-  children: ReactNode
-}
-
-function DrawerFrame({ open, onClose, title, eyebrow, copy, icon, children }: DrawerProps) {
-  const ref = useRef<HTMLElement>(null)
-  const closeRef = useRef(onClose)
-  closeRef.current = onClose
-  useEffect(() => {
-    if (!open) return
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const oldOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const node = ref.current
-    const controls = () => Array.from(node?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])') || [])
-    window.requestAnimationFrame(() => controls()[0]?.focus())
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return }
-      if (event.key !== 'Tab') return
-      const items = controls(); if (!items.length) return
-      if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1)?.focus() }
-      else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0].focus() }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => { document.removeEventListener('keydown', onKeyDown); document.body.style.overflow = oldOverflow; previous?.focus() }
-  }, [open])
-  if (!open) return null
-  return <div className="management-drawer"><button className="management-drawer__scrim" onClick={onClose} aria-label={`Close ${title}`}/><aside ref={ref} role="dialog" aria-modal="true" aria-labelledby="management-drawer-title"><header><span>{icon}</span><div><p className="eyebrow">{eyebrow}</p><h2 id="management-drawer-title">{title}</h2><p>{copy}</p></div><button type="button" className="icon-button" onClick={onClose} aria-label={`Close ${title}`}><X/></button></header>{children}</aside></div>
-}
+import { ManagementDrawer as DrawerFrame } from './ManagementDrawer'
 
 function FormMessage({ error, success }: { error: string; success: string }) {
   if (error) return <p className="form-message form-message--error" role="alert">{error}</p>

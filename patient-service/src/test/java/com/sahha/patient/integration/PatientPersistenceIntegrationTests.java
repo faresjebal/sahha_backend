@@ -40,6 +40,7 @@ class PatientPersistenceIntegrationTests {
 		for (String table : new String[] {
 			"patient_identity",
 			"patient_organisation_registration",
+			"patient_account_link",
 			"patient_audit_event",
 			"patient_outbox_event"
 		}) {
@@ -50,7 +51,7 @@ class PatientPersistenceIntegrationTests {
 							String.class));
 		}
 		assertNotNull(flyway.info().current());
-		assertEquals("2", flyway.info().current().getVersion().getVersion());
+		assertEquals("3", flyway.info().current().getVersion().getVersion());
 	}
 
 	@Test

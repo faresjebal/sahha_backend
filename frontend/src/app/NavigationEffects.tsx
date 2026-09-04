@@ -15,7 +15,7 @@ export function NavigationEffects() {
   const label = labelForPath(location.pathname)
 
   useEffect(() => {
-    document.title = `${label} | Aegis`
+    document.title = `${label} | Sahha`
     window.scrollTo({ top: 0, behavior: 'auto' })
   }, [label])
 

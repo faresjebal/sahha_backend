@@ -1,9 +1,14 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Scheduling Service" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
-    <module name="scheduling-service" />
-    <option name="SPRING_BOOT_MAIN_CLASS" value="com.sahha.scheduling.SchedulingServiceApplication" />
     <option name="ACTIVE_PROFILES" value="local" />
+    <envs>
+      <env name="KAFKA_BOOTSTRAP_SERVERS" value="localhost:9092" />
+      <env name="SCHEDULING_CLINICAL_CONSUMER_ENABLED" value="true" />
+      <env name="SCHEDULING_OUTBOX_PUBLISHER_ENABLED" value="true" />
+    </envs>
+    <module name="scheduling-service" />
     <option name="SHORTEN_COMMAND_LINE" value="ARGS_FILE" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.sahha.scheduling.SchedulingServiceApplication" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>

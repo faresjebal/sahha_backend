@@ -50,12 +50,12 @@ const rolePermissions: Record<AppRole, Permission[]> = {
 
 const roleIdentity: Record<AppRole, Omit<SessionUser, 'role' | 'permissions'>> = {
   patient: { id: 'USR-P-2401', displayName: 'Nora Bennett', email: 'nora.b@example.com', initials: 'NB' },
-  doctor: { id: 'USR-D-1042', displayName: 'Dr. Mara Voss', email: 'mara.v@aegis.health', initials: 'MV', organizationId: 'ORG-STH', departmentId: 'DEP-CARD', doctorType:'PRIVATE' },
+  doctor: { id: 'USR-D-1042', displayName: 'Dr. Mara Voss', email: 'mara.v@sahha.health', initials: 'MV', organizationId: 'ORG-STH', departmentId: 'DEP-CARD', doctorType:'PRIVATE' },
   staff: { id:'USR-S-2001', displayName:'Elena Petrov', email:'elena.p@sthelena.health', initials:'EP', organizationId:'ORG-STH', departmentId:'DEP-CARD', staffRole:'NURSE' },
   'hospital-operations': { id: 'USR-O-1042', displayName: 'Omar Haddad', email: 'omar.h@sthelena.health', initials: 'OH', organizationId: 'ORG-STH' },
   'hospital-super-admin': { id: 'USR-A-1001', displayName: 'Leila Mansour', email: 'leila.m@sthelena.health', initials: 'LM', organizationId: 'ORG-STH' },
   receptionist: { id: 'USR-R-1098', displayName: 'Sofia Alvarez', email: 'sofia.a@sthelena.health', initials: 'SA', organizationId: 'ORG-STH' },
-  'platform-admin': { id: 'USR-PA-001', displayName: 'Avery Kim', email: 'avery.k@aegis.health', initials: 'AK' },
+  'platform-admin': { id: 'USR-PA-001', displayName: 'Avery Kim', email: 'avery.k@sahha.health', initials: 'AK' },
 }
 
 const staffIdentities: Record<StaffRole, Omit<SessionUser, 'role' | 'permissions'>> = {

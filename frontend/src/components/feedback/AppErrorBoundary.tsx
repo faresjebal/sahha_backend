@@ -13,7 +13,7 @@ export class AppErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Replace this with your production observability client. Never send PHI.
-    console.error('Aegis interface error', { error, componentStack: info.componentStack })
+    console.error('Sahha interface error', { error, componentStack: info.componentStack })
   }
 
   private retry = () => this.setState({ failed: false, reference: '' })

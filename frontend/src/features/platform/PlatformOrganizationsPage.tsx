@@ -12,11 +12,11 @@ import {
   Plus,
   Search,
   ShieldCheck,
-  X,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
+import { ManagementDrawer } from '../../components/forms/ManagementDrawer'
 import type { CreateOrganisationCommand, OrganisationPageResource, OrganisationResource, OrganisationType } from '../../models/organisation'
 import { ApiError, apiErrorMessage } from '../../services/api/ApiError'
 import { organisationRestService } from '../../services/api/organisationRestService'
@@ -165,17 +165,24 @@ export function PlatformOrganizationsPage() {
   })
 
   return <div className="page platform-depth-page">
-    <div className="page-intro"><div><p className="eyebrow">Tenant operations · Real service data</p><h1>Clinical organizations.</h1><p>Create and inspect healthcare tenants while the backend enforces platform authority, auditability, and tenant isolation.</p></div><button className="primary soft" onClick={()=>{createOrganisation.reset();setFormOpen(true)}}><Plus/>Add organization</button></div>
+    <div className="page-intro"><div><p className="eyebrow">Tenant operations · Real service data</p><h1>Clinical organisations.</h1><p>Create and inspect healthcare tenants while the backend enforces platform authority, auditability, and tenant isolation.</p></div><button className="primary soft" onClick={()=>{createOrganisation.reset();setFormOpen(true)}}><Plus/>Add organisation</button></div>
 
     {notice&&<div className="inline-success" role="status"><Check/>{notice}</div>}
 
-    {formOpen&&<form className="order-composer tenant-create" onSubmit={submit} noValidate>
-      <header><div><p className="eyebrow">Platform-controlled onboarding</p><h2>Create an active organization</h2></div><button type="button" className="icon-button" aria-label="Close organization form" onClick={()=>{setFormOpen(false);createOrganisation.reset()}}><X/></button></header>
-      <p className="tenant-create__notice"><ShieldCheck/>Document verification and applicant review are deferred. This internship action creates the organization as active immediately.</p>
-      <div className="order-fields">
-        <label><span>Organization name</span><input {...register('name')} aria-invalid={Boolean(errors.name)}/><FieldError message={errors.name?.message}/></label>
+    <ManagementDrawer
+      open={formOpen}
+      onClose={()=>{setFormOpen(false);createOrganisation.reset()}}
+      title="Create an active organisation"
+      eyebrow="Platform-controlled onboarding"
+      copy="Create the tenant identity and operational contact details used across Sahha."
+      icon={<Hospital/>}
+      wide
+    ><form className="management-form" onSubmit={submit} noValidate>
+      <p className="tenant-create__notice"><ShieldCheck/>Document verification and applicant review are deferred. This internship action creates the organisation as active immediately.</p>
+      <div className="management-fields">
+        <label><span>Organisation name</span><input {...register('name')} aria-invalid={Boolean(errors.name)}/><FieldError message={errors.name?.message}/></label>
         <label><span>Legal name <small>optional</small></span><input {...register('legalName')} aria-invalid={Boolean(errors.legalName)}/><FieldError message={errors.legalName?.message}/></label>
-        <label><span>Organization type</span><select {...register('type')}><option value="HOSPITAL">Hospital</option><option value="CLINIC">Clinic</option><option value="PRIVATE_PRACTICE">Independent practice</option></select></label>
+        <label><span>Organisation type</span><select {...register('type')}><option value="HOSPITAL">Hospital</option><option value="CLINIC">Clinic</option><option value="PRIVATE_PRACTICE">Independent practice</option></select></label>
         <label><span>Contact email</span><input type="email" {...register('contactEmail')} aria-invalid={Boolean(errors.contactEmail)}/><FieldError message={errors.contactEmail?.message}/></label>
         <label><span>Phone number</span><input {...register('phoneNumber')} aria-invalid={Boolean(errors.phoneNumber)}/><FieldError message={errors.phoneNumber?.message}/></label>
         <label><span>Street address</span><input {...register('address')} aria-invalid={Boolean(errors.address)}/><FieldError message={errors.address?.message}/></label>
@@ -185,27 +192,27 @@ export function PlatformOrganizationsPage() {
         <label><span>Country code</span><input maxLength={2} {...register('countryCode')} aria-invalid={Boolean(errors.countryCode)}/><FieldError message={errors.countryCode?.message}/></label>
         <label className="wide"><span>Time zone</span><input {...register('timeZone')} aria-invalid={Boolean(errors.timeZone)} placeholder="Africa/Tunis"/><FieldError message={errors.timeZone?.message}/></label>
       </div>
-      {createOrganisation.isError&&<p className="form-message form-message--error" role="alert">{errorMessage(createOrganisation.error, 'The organization could not be created.')}</p>}
-      <footer><button type="button" className="secondary" onClick={()=>setFormOpen(false)}>Cancel</button><button className="primary" disabled={createOrganisation.isPending}>{createOrganisation.isPending?<><LoaderCircle className="spin"/>Creating…</>:<><CircleCheck/>Create organization</>}</button></footer>
-    </form>}
+      {createOrganisation.isError&&<p className="form-message form-message--error" role="alert">{errorMessage(createOrganisation.error, 'The organisation could not be created.')}</p>}
+      <footer><button type="button" className="secondary" onClick={()=>setFormOpen(false)}>Cancel</button><button className="primary" disabled={createOrganisation.isPending}>{createOrganisation.isPending?<><LoaderCircle className="spin"/>Creating…</>:<><CircleCheck/>Create organisation</>}</button></footer>
+    </form></ManagementDrawer>
 
-    <section className="tenant-metrics" aria-label="Organization summary">
-      <article><Building2/><span><strong>{organisationsQuery.data?.totalElements ?? '—'}</strong><small>Total organizations</small></span></article>
+    <section className="tenant-metrics" aria-label="Organisation summary">
+      <article><Building2/><span><strong>{organisationsQuery.data?.totalElements ?? '—'}</strong><small>Total organisations</small></span></article>
       <article><Activity/><span><strong>{organisationsQuery.isPending?'—':activeCount}</strong><small>Active workspaces</small></span></article>
       <article><Hospital/><span><strong>{organisationsQuery.isPending?'—':hospitalCount}</strong><small>Hospitals</small></span></article>
       <article><ShieldCheck/><span><strong>{organisationsQuery.isPending?'—':practiceCount}</strong><small>Clinics and practices</small></span></article>
     </section>
 
     <div className="tenant-layout">
-      <section className="tenant-directory" aria-label="Healthcare organizations">
-        <div className="tenant-tools"><label className="search-field"><Search/><span className="sr-only">Search organizations</span><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search name, type, city, or region"/></label></div>
-        {organisationsQuery.isPending&&<div className="tenant-state" role="status"><LoaderCircle className="spin"/><strong>Loading organizations</strong><span>Reading the Platform Administrator directory.</span></div>}
-        {organisationsQuery.isError&&<div className="tenant-state tenant-state--error" role="alert"><AlertTriangle/><strong>Organizations unavailable</strong><span>{errorMessage(organisationsQuery.error, 'The organization directory could not be loaded.')}</span><button className="secondary" onClick={()=>void organisationsQuery.refetch()}>Try again</button></div>}
+      <section className="tenant-directory" aria-label="Healthcare organisations">
+        <div className="tenant-tools"><label className="search-field"><Search/><span className="sr-only">Search organisations</span><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search name, type, city, or region"/></label></div>
+        {organisationsQuery.isPending&&<div className="tenant-state" role="status"><LoaderCircle className="spin"/><strong>Loading organisations</strong><span>Reading the Platform Administrator directory.</span></div>}
+        {organisationsQuery.isError&&<div className="tenant-state tenant-state--error" role="alert"><AlertTriangle/><strong>Organisations unavailable</strong><span>{errorMessage(organisationsQuery.error, 'The organisation directory could not be loaded.')}</span><button className="secondary" onClick={()=>void organisationsQuery.refetch()}>Try again</button></div>}
         {!organisationsQuery.isPending&&!organisationsQuery.isError&&visibleOrganisations.map(item=><button className={selected?.id===item.id?'active':''} onClick={()=>setSelectedId(item.id)} key={item.id}><span className="tenant-mark"><Building2/></span><span><strong>{item.name}</strong><small>{typeLabel[item.type]} · {item.city}, {item.region}</small></span><StatusBadge value={statusLabel(item.status)}/><ChevronRight/></button>)}
-        {!organisationsQuery.isPending&&!organisationsQuery.isError&&!visibleOrganisations.length&&<div className="tenant-state"><Building2/><strong>{organisations.length?'No matching organizations':'No organizations yet'}</strong><span>{organisations.length?'Try another search.':'Create the first healthcare tenant from this page.'}</span></div>}
+        {!organisationsQuery.isPending&&!organisationsQuery.isError&&!visibleOrganisations.length&&<div className="tenant-state"><Building2/><strong>{organisations.length?'No matching organisations':'No organisations yet'}</strong><span>{organisations.length?'Try another search.':'Create the first healthcare tenant from this page.'}</span></div>}
       </section>
 
-      {selected?<aside className="tenant-profile" aria-busy={organisationDetailQuery.isPending}><header><span className="tenant-mark large"><Building2/></span><StatusBadge value={statusLabel(selected.status)}/></header>{organisationDetailQuery.isError&&<p className="form-message form-message--error" role="alert">{errorMessage(organisationDetailQuery.error, 'The latest organization details could not be loaded.')}</p>}<p className="eyebrow">{selected.id} · {selected.countryCode}</p><h2>{selected.name}</h2><p>{selected.legalName || typeLabel[selected.type]}. This profile is supplied by Organisation Service and remains isolated from every other tenant.</p><dl><div><dt>Type</dt><dd>{typeLabel[selected.type]}</dd></div><div><dt>Workspace state</dt><dd><StatusBadge value={statusLabel(selected.status)}/></dd></div><div><dt>Contact</dt><dd>{selected.contactEmail}<br/>{selected.phoneNumber}</dd></div><div><dt>Address</dt><dd>{selected.address}<br/>{selected.postalCode&&`${selected.postalCode} `}{selected.city}, {selected.region}</dd></div><div><dt>Time zone</dt><dd>{selected.timeZone}</dd></div><div><dt>Created</dt><dd>{new Intl.DateTimeFormat(undefined,{dateStyle:'medium'}).format(new Date(selected.createdAt))}</dd></div></dl><OrganisationAdministratorsPanel organisationId={selected.id}/><div className="tenant-scope"><ShieldCheck/><span><strong>Next configuration boundary</strong><small>Active-organisation selection and department management come next.</small></span></div></aside>:<aside className="tenant-profile tenant-profile--empty"><Building2/><h2>Select an organization</h2><p>Organization details will appear here after the directory loads.</p></aside>}
+      {selected?<aside className="tenant-profile" aria-busy={organisationDetailQuery.isPending}><header><span className="tenant-mark large"><Building2/></span><StatusBadge value={statusLabel(selected.status)}/></header>{organisationDetailQuery.isError&&<p className="form-message form-message--error" role="alert">{errorMessage(organisationDetailQuery.error, 'The latest organisation details could not be loaded.')}</p>}<p className="eyebrow">{selected.id} · {selected.countryCode}</p><h2>{selected.name}</h2><p>{selected.legalName || typeLabel[selected.type]}. This profile is supplied by Organisation Service and remains isolated from every other tenant.</p><dl><div><dt>Type</dt><dd>{typeLabel[selected.type]}</dd></div><div><dt>Workspace state</dt><dd><StatusBadge value={statusLabel(selected.status)}/></dd></div><div><dt>Contact</dt><dd>{selected.contactEmail}<br/>{selected.phoneNumber}</dd></div><div><dt>Address</dt><dd>{selected.address}<br/>{selected.postalCode&&`${selected.postalCode} `}{selected.city}, {selected.region}</dd></div><div><dt>Time zone</dt><dd>{selected.timeZone}</dd></div><div><dt>Created</dt><dd>{new Intl.DateTimeFormat(undefined,{dateStyle:'medium'}).format(new Date(selected.createdAt))}</dd></div></dl><OrganisationAdministratorsPanel organisationId={selected.id}/><div className="tenant-scope"><ShieldCheck/><span><strong>Next configuration boundary</strong><small>Active-organisation selection and department management come next.</small></span></div></aside>:<aside className="tenant-profile tenant-profile--empty"><Building2/><h2>Select an organisation</h2><p>Organisation details will appear here after the directory loads.</p></aside>}
     </div>
   </div>
 }

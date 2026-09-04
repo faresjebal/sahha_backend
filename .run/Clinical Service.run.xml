@@ -1,5 +1,9 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Clinical Service" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <envs>
+      <env name="CLINICAL_OUTBOX_PUBLISHER_ENABLED" value="true" />
+      <env name="KAFKA_BOOTSTRAP_SERVERS" value="localhost:9092" />
+    </envs>
     <module name="clinical-service" />
     <option name="SPRING_BOOT_MAIN_CLASS" value="com.sahha.clinical.ClinicalServiceApplication" />
     <option name="ACTIVE_PROFILES" value="local" />

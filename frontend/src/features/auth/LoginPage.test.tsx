@@ -18,7 +18,7 @@ vi.mock('../../services', () => ({ services:{ auth:authService } }))
 vi.mock('../../config/env', () => ({
   env:{
     apiBaseUrl:'http://localhost:8079/api/v1',
-    appName:'Aegis',
+    appName:'Sahha',
     useMocks:true,
     useAuthMocks:false,
     requestTimeoutMs:12_000,

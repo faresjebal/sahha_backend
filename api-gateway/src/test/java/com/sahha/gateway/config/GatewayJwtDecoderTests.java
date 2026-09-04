@@ -27,8 +27,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -41,7 +41,7 @@ class GatewayJwtDecoderTests {
 
 	private static HttpServer jwkServer;
 	private static RSAKey signingKey;
-	private static JwtDecoder decoder;
+	private static ReactiveJwtDecoder decoder;
 
 	@BeforeAll
 	static void startJwkServer() throws Exception {
@@ -93,7 +93,7 @@ class GatewayJwtDecoderTests {
 				JWSAlgorithm.RS256,
 				ISSUER,
 				AUDIENCE,
-				"access"));
+				"access")).block();
 
 		assertEquals(AUDIENCE, jwt.getAudience().getFirst());
 		assertEquals(
@@ -113,7 +113,7 @@ class GatewayJwtDecoderTests {
 						JWSAlgorithm.RS256,
 						ISSUER,
 						AUDIENCE,
-						"access")));
+						"access")).block());
 		assertThrows(
 				JwtException.class,
 				() -> decoder.decode(token(
@@ -121,7 +121,7 @@ class GatewayJwtDecoderTests {
 						JWSAlgorithm.RS512,
 						ISSUER,
 						AUDIENCE,
-						"access")));
+						"access")).block());
 		assertThrows(
 				JwtException.class,
 				() -> decoder.decode(token(
@@ -129,7 +129,7 @@ class GatewayJwtDecoderTests {
 						JWSAlgorithm.RS256,
 						"https://wrong-issuer.example",
 						AUDIENCE,
-						"access")));
+						"access")).block());
 		assertThrows(
 				JwtException.class,
 				() -> decoder.decode(token(
@@ -137,7 +137,7 @@ class GatewayJwtDecoderTests {
 						JWSAlgorithm.RS256,
 						ISSUER,
 						"wrong-audience",
-						"access")));
+						"access")).block());
 		assertThrows(
 				JwtException.class,
 				() -> decoder.decode(token(
@@ -145,7 +145,7 @@ class GatewayJwtDecoderTests {
 						JWSAlgorithm.RS256,
 						ISSUER,
 						AUDIENCE,
-						"refresh")));
+						"refresh")).block());
 	}
 
 	private static RSAKey rsaKey(String keyId) throws Exception {

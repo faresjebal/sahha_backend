@@ -127,6 +127,32 @@ public class PatientAuditEvent {
 				occurredAt);
 	}
 
+	public static PatientAuditEvent accountLinkActivity(
+			PatientAccountLink link,
+			UUID organisationId,
+			PatientAuditEventType eventType,
+			Map<String, Object> metadata,
+			String requestId,
+			Instant occurredAt) {
+		PatientAccountLink requiredLink = Objects.requireNonNull(
+				link,
+				"link must not be null");
+		if (eventType != PatientAuditEventType.PATIENT_ACCOUNT_LINKED) {
+			throw new IllegalArgumentException("eventType is not account-link activity");
+		}
+		return create(
+				organisationId,
+				requiredLink.getAuthUserId(),
+				"PATIENT_ACCOUNT_LINK",
+				requiredLink.getId(),
+				requiredLink.getPatientId(),
+				eventType,
+				requiredLink.getVersion(),
+				metadata,
+				requestId,
+				occurredAt);
+	}
+
 	private static PatientAuditEvent create(
 			UUID organisationId,
 			UUID actorUserId,

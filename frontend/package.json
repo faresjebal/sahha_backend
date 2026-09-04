@@ -1,5 +1,5 @@
 {
-  "name": "aegis-medical-platform",
+  "name": "sahha-frontend",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -10,6 +10,7 @@
     "test": "vitest run",
     "validate:ui": "node scripts/visual-check.mjs",
     "smoke:auth": "node scripts/auth-live-smoke.mjs",
+    "smoke:roles": "node scripts/role-live-smoke.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

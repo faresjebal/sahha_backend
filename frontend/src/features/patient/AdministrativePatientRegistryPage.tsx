@@ -20,6 +20,7 @@ import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useAuth } from '../../app/auth/AuthProvider'
+import { ManagementDrawer } from '../../components/forms/ManagementDrawer'
 import type {
   CreatePatientRegistrationCommand,
   DuplicateCandidateResource,
@@ -322,10 +323,17 @@ export function AdministrativePatientRegistryPage({ mode = 'directory' }: Regist
 
     {mode === 'registration'&&!formOpen&&<section className="registration-guide"><article><i>1</i><h2>Confirm identity</h2><p>Capture only the administrative identifiers required for safe matching.</p></article><article><i>2</i><h2>Review candidates</h2><p>Strong and probable matches must receive an explicit decision.</p></article><article><i>3</i><h2>Create local record</h2><p>Sahha assigns the active organisation’s medical-record number.</p></article></section>}
 
-    {formOpen&&<form className="order-composer patient-registration-form" onSubmit={submit} noValidate>
-      <header><div><p className="eyebrow">Administrative identity · Synthetic data only</p><h2>New patient registration</h2></div><button type="button" className="icon-button" aria-label="Close patient registration" onClick={()=>{setFormOpen(false);setDuplicateReview(null)}}><X/></button></header>
+    <ManagementDrawer
+      open={formOpen}
+      onClose={()=>{setFormOpen(false);setDuplicateReview(null)}}
+      title="New patient registration"
+      eyebrow="Administrative identity · Synthetic data only"
+      copy="Capture the minimum administrative identity, then review duplicate candidates before creating a record."
+      icon={<UserPlus/>}
+      wide
+    ><form className="management-form patient-registration-form" onSubmit={submit} noValidate>
       <p className="tenant-create__notice"><ShieldCheck/>National ID or passport values are fingerprinted for matching and returned only in masked form.</p>
-      <div className="order-fields patient-registration-fields">
+      <div className="management-fields patient-registration-fields">
         <label><span>Legal first name</span><input {...register('firstName')} aria-invalid={Boolean(errors.firstName)} autoComplete="given-name"/><FieldError message={errors.firstName?.message}/></label>
         <label><span>Legal last name</span><input {...register('lastName')} aria-invalid={Boolean(errors.lastName)} autoComplete="family-name"/><FieldError message={errors.lastName?.message}/></label>
         <label><span>Date of birth</span><input type="date" max={new Date().toISOString().slice(0,10)} {...register('dateOfBirth')} aria-invalid={Boolean(errors.dateOfBirth)}/><FieldError message={errors.dateOfBirth?.message}/></label>
@@ -361,7 +369,7 @@ export function AdministrativePatientRegistryPage({ mode = 'directory' }: Regist
       {(duplicateMutation.isError||createMutation.isError)&&!duplicateReview&&<p className="form-message form-message--error" role="alert">{errorMessage(createMutation.error||duplicateMutation.error, 'The patient registration could not be completed.')}</p>}
       {createMutation.isError&&duplicateReview&&<p className="form-message form-message--error" role="alert">{errorMessage(createMutation.error, 'The duplicate decision could not be completed.')}</p>}
       <footer><button type="button" className="secondary" onClick={()=>setFormOpen(false)}>Cancel</button>{!duplicateReview&&<button className="primary" disabled={duplicateMutation.isPending||createMutation.isPending}>{duplicateMutation.isPending?<><LoaderCircle className="spin"/>Checking duplicates…</>:createMutation.isPending?<><LoaderCircle className="spin"/>Registering…</>:<><ShieldCheck/>Check and register</>}</button>}</footer>
-    </form>}
+    </form></ManagementDrawer>
 
     {mode === 'directory'&&<>
       <form className="patient-directory-search" onSubmit={event=>{event.preventDefault();setQuery(searchInput.trim())}}><label className="search-field reception-search"><Search/><span className="sr-only">Search patients</span><input value={searchInput} onChange={event=>setSearchInput(event.target.value)} placeholder="Search name, medical-record number, phone, or email"/></label><button className="secondary">Search directory</button>{query&&<button type="button" className="text-button" onClick={()=>{setSearchInput('');setQuery('')}}>Clear</button>}</form>

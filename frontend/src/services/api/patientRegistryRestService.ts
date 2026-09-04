@@ -5,6 +5,9 @@ import type {
   PatientDuplicateCheckCommand,
   PatientDuplicateCheckResource,
   UpdatePatientRegistrationCommand,
+  LinkPatientAccountCommand,
+  MyPatientRegistrationResource,
+  PatientAccountLinkResource,
 } from '../../models/patient'
 import { httpClient } from './httpClient'
 
@@ -47,6 +50,19 @@ export const patientRegistryRestService = {
     return httpClient.request<PatientAdministrativeResource>(
       `/patients/${encodeURIComponent(registrationId)}`,
       { method:'PUT', body:command },
+    )
+  },
+
+  linkMyAccount(command: LinkPatientAccountCommand) {
+    return httpClient.request<PatientAccountLinkResource>(
+      '/patients/me/account-link',
+      { method:'POST', body:command },
+    )
+  },
+
+  listMyRegistrations() {
+    return httpClient.request<MyPatientRegistrationResource[]>(
+      '/patients/me/registrations',
     )
   },
 }

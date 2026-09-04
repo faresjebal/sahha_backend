@@ -4,8 +4,8 @@ import { resolve } from 'node:path'
 import { chromium } from 'playwright-core'
 import { build, preview } from 'vite'
 
-const baseURL = process.env.AEGIS_PREVIEW_URL || 'http://127.0.0.1:4174'
-const output = process.env.AEGIS_VISUAL_OUTPUT || resolve(tmpdir(), 'aegis-visual')
+const baseURL = process.env.SAHHA_PREVIEW_URL || process.env.AEGIS_PREVIEW_URL || 'http://127.0.0.1:4174'
+const output = process.env.SAHHA_VISUAL_OUTPUT || process.env.AEGIS_VISUAL_OUTPUT || resolve(tmpdir(), 'sahha-visual')
 await mkdir(output, { recursive:true })
 
 // The complete role gallery remains a mock-domain regression suite even when
@@ -48,9 +48,18 @@ async function inspect(page, name, path, viewport) {
   if (dimensions.document > dimensions.viewport + 1 || dimensions.body > dimensions.viewport + 1) {
     throw new Error(`${name} has document-level horizontal overflow: ${JSON.stringify(dimensions)}`)
   }
+  const productIdentity = await page.locator('.brand, .aegis-wordmark').first().textContent()
+  if (!productIdentity?.toUpperCase().includes('SAHHA') || productIdentity.toUpperCase().includes('AEGIS')) {
+    throw new Error(`${name} does not expose the approved Sahha product identity.`)
+  }
+  if (!documentTitleEndsWithSahha(await page.title())) {
+    throw new Error(`${name} has an inconsistent document title: ${await page.title()}`)
+  }
   await page.screenshot({ path:resolve(output, `${name}.png`), fullPage:true })
   return dimensions
 }
+
+const documentTitleEndsWithSahha = title => title.endsWith('| Sahha')
 
 async function verifyFirstTab(page, name) {
   await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur() })
@@ -67,6 +76,25 @@ async function verifyDrawer(page, buttonName) {
   await page.getByRole('dialog').waitFor({ state:'visible' })
   await page.keyboard.press('Escape')
   await page.getByRole('dialog').waitFor({ state:'detached' })
+}
+
+async function verifyDoctorNotificationPanel(page) {
+  const previousViewport = page.viewportSize()
+  await page.setViewportSize({ width:375, height:900 })
+  await page.getByRole('button', { name:'Notifications', exact:true }).click()
+  const panel = page.getByRole('dialog', { name:'Notifications' })
+  await panel.waitFor({ state:'visible' })
+  const bounds = await panel.boundingBox()
+  if (!bounds || bounds.x < 0 || bounds.x + bounds.width > 375) {
+    throw new Error(`Doctor notification panel escapes the mobile viewport: ${JSON.stringify(bounds)}`)
+  }
+  await page.screenshot({
+    path:resolve(output, 'doctor-notifications-375.png'),
+    fullPage:true,
+  })
+  await page.keyboard.press('Escape')
+  await panel.waitFor({ state:'detached' })
+  if (previousViewport) await page.setViewportSize(previousViewport)
 }
 
 const report = []
@@ -98,6 +126,7 @@ try {
     const page = await context.newPage()
     await signIn(page, 'Independent doctor', 'Hospital doctor')
     report.push(['doctor-1440', await inspect(page, 'doctor-1440', '/doctor/clinical', { width:1440, height:1000 })])
+    await verifyDoctorNotificationPanel(page)
     await verifyDrawer(page, 'Document encounter')
     report.push(['doctor-team-1024', await inspect(page, 'doctor-team-1024', '/doctor/team', { width:1024, height:900 })])
     report.push(['doctor-messages-1024', await inspect(page, 'doctor-messages-1024', '/doctor/messages', { width:1024, height:900 })])

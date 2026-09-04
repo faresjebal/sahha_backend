@@ -22,7 +22,7 @@ const roleOptions: Array<{ value: AppRole; label: string; copy: string; icon: ty
   { value:'hospital-operations', label:'Hospital operations', copy:'Departments, flow, beds, staffing, and handover.', icon:Hospital },
   { value:'hospital-super-admin', label:'Hospital super admin', copy:'Finance, statistics, access, and audit.', icon:Building2 },
   { value:'receptionist', label:'Receptionist', copy:'Restricted registration and patient-service tools.', icon:KeyRound },
-  { value:'platform-admin', label:'Platform administrator', copy:'Organizations, verification, trust, and platform health.', icon:HeartPulse },
+  { value:'platform-admin', label:'Platform administrator', copy:'Organisations, verification, trust, and platform health.', icon:HeartPulse },
 ]
 
 const roleRoutePrefix: Record<AppRole, string> = {
@@ -73,9 +73,9 @@ function AuthenticationLayout({
 }) {
   const navigate = useNavigate()
   return <main className="login-page">
-    <button className="login-back" onClick={()=>navigate('/')}><ArrowLeft/>Back to Aegis</button>
+    <button className="login-back" onClick={()=>navigate('/')}><ArrowLeft/>Back to Sahha</button>
     <section className="login-intro">
-      <span className="aegis-wordmark"><i><HeartPulse/></i>AEGIS</span>
+      <span className="aegis-wordmark"><i><HeartPulse/></i>SAHHA</span>
       <div>
         <p>Secure Sahha identity</p>
         <h1>Care starts with a trusted account.</h1>
@@ -124,9 +124,9 @@ export function LoginPage() {
     resolver:zodResolver(loginSchema),
     defaultValues:{
       email:env.useAuthMocks
-        ? 'demo@aegis.health'
+        ? 'demo@sahha.health'
         : ((location.state as { registeredEmail?:string } | null)?.registeredEmail || ''),
-      password:env.useAuthMocks ? 'aegis-demo' : '',
+      password:env.useAuthMocks ? 'sahha-demo' : '',
     },
   })
 

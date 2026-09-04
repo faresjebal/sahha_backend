@@ -20,5 +20,10 @@ public record GatewayHttpClientProperties(
 			throw new IllegalArgumentException(
 					fieldName + " must be positive");
 		}
+		if ("connectTimeout".equals(fieldName)
+				&& value.toMillis() > Integer.MAX_VALUE) {
+			throw new IllegalArgumentException(
+					"connectTimeout is too large");
+		}
 	}
 }

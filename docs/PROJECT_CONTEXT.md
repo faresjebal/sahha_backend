@@ -117,7 +117,7 @@ The primary acceptance journey is:
 - Basic consultations, history, symptoms, vital signs, examination, diagnoses,
   treatment, medication, follow-up, finalisation, and corrections.
 - Basic prescription information inside the Clinical Service.
-- Secure medical-file upload and download through MinIO in development.
+- Secure medical-file upload and download through SeaweedFS in development.
 - Doctor messaging, referrals, selected-data sharing, consent evidence,
   acceptance, rejection, revocation, and expiry.
 - In-app and WebSocket notifications.
@@ -191,7 +191,7 @@ The primary acceptance journey is:
 
 ### Files
 
-- Object bytes live in MinIO or secure object storage.
+- Object bytes live in SeaweedFS or secure object storage.
 - PostgreSQL stores metadata, checksum, ownership, category, and storage key.
 - Upload and download are authorised.
 - URLs are short-lived; permanent public URLs are prohibited.
@@ -230,7 +230,7 @@ flowchart LR
     FILE --- DBF[(File metadata DB)]
     AUDIT --- DBAU[(Audit DB)]
 
-    FILE --> MINIO[(MinIO)]
+    FILE --> SEAWEED[(SeaweedFS S3 gateway)]
     AUTH --> REDIS[(Redis)]
     COM --> REDIS
     SCH --> REDIS
@@ -342,7 +342,7 @@ Spring Cloud Config, OpenAPI, Maven, JUnit, Mockito, and Testcontainers.
 
 ### Data and infrastructure
 
-PostgreSQL, selective JSONB, Redis for bounded technical use cases, MinIO,
+PostgreSQL, selective JSONB, Redis for bounded technical use cases, SeaweedFS,
 Kafka, Docker Compose, Git/GitHub, GitHub Actions, and later Kubernetes/K3s.
 
 The Maven parent declares Spring Boot `4.1.0` and Spring Cloud `2025.1.2`.

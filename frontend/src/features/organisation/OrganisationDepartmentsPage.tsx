@@ -13,12 +13,12 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
-  X,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useAuth } from '../../app/auth/AuthProvider'
+import { ManagementDrawer } from '../../components/forms/ManagementDrawer'
 import type {
   CreateDepartmentCommand,
   DepartmentPageResource,
@@ -202,17 +202,23 @@ export function OrganisationDepartmentsPage() {
 
     {notice&&<div className="inline-success" role="status"><Check/>{notice}</div>}
 
-    {editorOpen&&<form className="order-composer tenant-create department-editor" onSubmit={submit} noValidate>
-      <header><div><p className="eyebrow">Organisation-controlled structure</p><h2>{editing ? 'Edit department' : 'Create a department'}</h2></div><button type="button" className="icon-button" aria-label="Close department form" onClick={()=>{setEditorOpen(false);saveDepartment.reset()}}><X/></button></header>
+    <ManagementDrawer
+      open={editorOpen}
+      onClose={()=>{setEditorOpen(false);saveDepartment.reset()}}
+      title={editing ? 'Edit department' : 'Create a department'}
+      eyebrow="Organisation-controlled structure"
+      copy="Define the service line without changing the active organisation context."
+      icon={<Building2/>}
+    ><form className="management-form" onSubmit={submit} noValidate>
       <p className="tenant-create__notice"><ShieldCheck/>The active organisation comes from your signed access token. It cannot be chosen or changed in this form.</p>
-      <div className="order-fields">
+      <div className="management-fields">
         <label><span>Department name</span><input {...register('name')} aria-invalid={Boolean(errors.name)} placeholder="e.g. Cardiology"/><FieldError message={errors.name?.message}/></label>
         <label><span>Department code</span><input {...register('code')} aria-invalid={Boolean(errors.code)} placeholder="e.g. CARD"/><FieldError message={errors.code?.message}/></label>
         <label className="wide"><span>Description <small>optional</small></span><textarea rows={4} {...register('description')} aria-invalid={Boolean(errors.description)} placeholder="Administrative purpose and service scope"/><FieldError message={errors.description?.message}/></label>
       </div>
       {saveDepartment.isError&&<p className="form-message form-message--error" role="alert">{errorMessage(saveDepartment.error, 'The department could not be saved.')}</p>}
       <footer><button type="button" className="secondary" onClick={()=>setEditorOpen(false)}>Cancel</button><button className="primary" disabled={saveDepartment.isPending}>{saveDepartment.isPending?<><LoaderCircle className="spin"/>Saving…</>:<><CircleCheck/>{editing ? 'Save changes' : 'Create department'}</>}</button></footer>
-    </form>}
+    </form></ManagementDrawer>
 
     <section className="department-summary" aria-label="Department summary">
       <article><Building2/><span><strong>{departmentsQuery.data?.totalElements ?? '—'}</strong><small>Total departments</small></span></article>

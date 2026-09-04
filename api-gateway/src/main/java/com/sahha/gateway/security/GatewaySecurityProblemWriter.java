@@ -1,14 +1,14 @@
 package com.sahha.gateway.security;
 
-import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
 import tools.jackson.databind.ObjectMapper;
 
 import com.sahha.gateway.filter.GatewayRequestContextFilter;
@@ -21,64 +21,52 @@ public final class GatewaySecurityProblemWriter {
 		this.objectMapper = objectMapper;
 	}
 
-	public void unauthorized(
-			HttpServletRequest request,
-			HttpServletResponse response)
-			throws IOException {
-		response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
-		write(
-				request,
-				response,
+	public Mono<Void> unauthorized(ServerWebExchange exchange) {
+		exchange.getResponse().getHeaders().set(
+				HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+		return write(
+				exchange,
 				HttpStatus.UNAUTHORIZED,
 				"Authentication required",
 				"Authentication credentials are invalid or expired.",
 				"urn:sahha:problem:authentication-required");
 	}
 
-	public void forbidden(
-			HttpServletRequest request,
-			HttpServletResponse response)
-			throws IOException {
-		write(
-				request,
-				response,
+	public Mono<Void> forbidden(ServerWebExchange exchange) {
+		return write(
+				exchange,
 				HttpStatus.FORBIDDEN,
 				"Request forbidden",
 				"The request is not authorised.",
 				"urn:sahha:problem:request-forbidden");
 	}
 
-	private void write(
-			HttpServletRequest request,
-			HttpServletResponse response,
+	private Mono<Void> write(
+			ServerWebExchange exchange,
 			HttpStatus status,
 			String title,
 			String detail,
-			String type)
-			throws IOException {
-		if (response.isCommitted()) {
-			return;
+			String type) {
+		if (exchange.getResponse().isCommitted()) {
+			return Mono.empty();
 		}
 		Map<String, Object> problem = new LinkedHashMap<>();
 		problem.put("type", type);
 		problem.put("title", title);
 		problem.put("status", status.value());
 		problem.put("detail", detail);
-		problem.put("instance", request.getRequestURI());
-		problem.put("requestId", requestId(request));
-		response.setStatus(status.value());
-		response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-		response.setHeader(
+		problem.put("instance", exchange.getRequest().getPath().value());
+		problem.put("requestId", exchange.getAttributeOrDefault(
+				GatewayRequestContextFilter.REQUEST_ID_ATTRIBUTE,
+				"unavailable"));
+		exchange.getResponse().setStatusCode(status);
+		exchange.getResponse().getHeaders().setContentType(
+				MediaType.APPLICATION_PROBLEM_JSON);
+		exchange.getResponse().getHeaders().set(
 				HttpHeaders.CACHE_CONTROL,
 				"no-store, no-cache, max-age=0");
-		objectMapper.writeValue(response.getOutputStream(), problem);
-	}
-
-	private static String requestId(HttpServletRequest request) {
-		Object requestId = request.getAttribute(
-				GatewayRequestContextFilter.REQUEST_ID_ATTRIBUTE);
-		return requestId instanceof String value
-				? value
-				: "unavailable";
+		byte[] body = objectMapper.writeValueAsBytes(problem);
+		DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(body);
+		return exchange.getResponse().writeWith(Mono.just(buffer));
 	}
 }

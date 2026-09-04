@@ -14,38 +14,32 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Mono;
 
 import com.sahha.gateway.filter.GatewayRequestContextFilter;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
-@AutoConfigureMockMvc
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureWebTestClient
 class GatewaySecurityRoutingIntegrationTests {
 
 	private static final String VALID_TOKEN = "aaa.bbb.ccc";
@@ -64,10 +58,10 @@ class GatewaySecurityRoutingIntegrationTests {
 			startOrganisationServer();
 
 	@Autowired
-	private MockMvc mockMvc;
+	private WebTestClient webTestClient;
 
 	@MockitoBean
-	private JwtDecoder jwtDecoder;
+	private ReactiveJwtDecoder jwtDecoder;
 
 	@DynamicPropertySource
 	static void authServiceInstance(DynamicPropertyRegistry registry) {
@@ -81,6 +75,26 @@ class GatewaySecurityRoutingIntegrationTests {
 						+ ORGANISATION_SERVER.getAddress().getPort());
 		registry.add(
 				"spring.cloud.discovery.client.simple.instances.patient-service[0].uri",
+				() -> "http://127.0.0.1:"
+						+ ORGANISATION_SERVER.getAddress().getPort());
+		registry.add(
+				"spring.cloud.discovery.client.simple.instances.scheduling-service[0].uri",
+				() -> "http://127.0.0.1:"
+						+ ORGANISATION_SERVER.getAddress().getPort());
+		registry.add(
+				"spring.cloud.discovery.client.simple.instances.clinical-service[0].uri",
+				() -> "http://127.0.0.1:"
+						+ ORGANISATION_SERVER.getAddress().getPort());
+		registry.add(
+				"spring.cloud.discovery.client.simple.instances.communication-service[0].uri",
+				() -> "http://127.0.0.1:"
+						+ ORGANISATION_SERVER.getAddress().getPort());
+		registry.add(
+				"spring.cloud.discovery.client.simple.instances.notification-service[0].uri",
+				() -> "http://127.0.0.1:"
+						+ ORGANISATION_SERVER.getAddress().getPort());
+		registry.add(
+				"spring.cloud.discovery.client.simple.instances.file-service[0].uri",
 				() -> "http://127.0.0.1:"
 						+ ORGANISATION_SERVER.getAddress().getPort());
 	}
@@ -102,30 +116,29 @@ class GatewaySecurityRoutingIntegrationTests {
 	@Test
 	void publicAuthRouteIgnoresStaleAccessAndSanitizesEdgeHeaders()
 			throws Exception {
-		mockMvc.perform(get("/api/v1/auth/csrf")
-						.cookie(new Cookie(
-								"SAHHA_ACCESS_TOKEN",
-								"expired-or-malformed"))
-						.header(
-								GatewayRequestContextFilter.REQUEST_ID_HEADER,
-								"request-12345")
-						.header(
-								GatewayRequestContextFilter.CLIENT_IP_HEADER,
-								"203.0.113.250")
-						.header("Authorization", "Bearer attacker-token")
-						.header("X-Sahha-User-Id", "attacker-user"))
-				.andExpect(status().isOk())
-				.andExpect(header().string(
+		webTestClient.get()
+				.uri("/api/v1/auth/csrf")
+				.cookie("SAHHA_ACCESS_TOKEN", "expired-or-malformed")
+				.header(
 						GatewayRequestContextFilter.REQUEST_ID_HEADER,
-						"request-12345"))
-				.andExpect(header().string(
+						"request-12345")
+				.header(
+						GatewayRequestContextFilter.CLIENT_IP_HEADER,
+						"203.0.113.250")
+				.header("Authorization", "Bearer attacker-token")
+				.header("X-Sahha-User-Id", "attacker-user")
+				.exchange()
+				.expectStatus().isOk()
+				.expectHeader().valueEquals(
+						GatewayRequestContextFilter.REQUEST_ID_HEADER,
+						"request-12345")
+				.expectHeader().valueEquals(
 						HttpHeaders.SET_COOKIE,
-						"XSRF-TOKEN=synthetic-csrf; Path=/"))
-				.andExpect(header().string(
+						"XSRF-TOKEN=synthetic-csrf; Path=/")
+				.expectHeader().valueEquals(
 						"Content-Security-Policy",
-						"default-src 'none'; frame-ancestors 'none'; base-uri 'none'"))
-				.andExpect(content().json(
-						"{\"token\":\"synthetic-csrf\"}"));
+						"default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+				.expectBody().json("{\"token\":\"synthetic-csrf\"}");
 
 		org.junit.jupiter.api.Assertions.assertEquals(
 				"request-12345",
@@ -142,11 +155,13 @@ class GatewaySecurityRoutingIntegrationTests {
 				LAST_UPSTREAM_HEADERS.get().getFirst(
 						GatewayRequestContextFilter.CLIENT_IP_HEADER));
 
-		mockMvc.perform(get("/api/v1/auth/csrf"))
-				.andExpect(status().isOk())
-				.andExpect(header().string(
+		webTestClient.get()
+				.uri("/api/v1/auth/csrf")
+				.exchange()
+				.expectStatus().isOk()
+				.expectHeader().valueEquals(
 						HttpHeaders.SET_COOKIE,
-						"XSRF-TOKEN=synthetic-csrf; Path=/"));
+						"XSRF-TOKEN=synthetic-csrf; Path=/");
 
 		verifyNoInteractions(jwtDecoder);
 		org.junit.jupiter.api.Assertions.assertEquals(
@@ -162,14 +177,16 @@ class GatewaySecurityRoutingIntegrationTests {
 	@Test
 	void protectedAuthRouteRequiresAValidAccessCookie()
 			throws Exception {
-		mockMvc.perform(post("/api/v1/auth/logout"))
-				.andExpect(status().isUnauthorized())
-				.andExpect(header().string(
-						HttpHeaders.WWW_AUTHENTICATE,
-						"Bearer"))
-				.andExpect(jsonPath("$.type").value(
-						"urn:sahha:problem:authentication-required"))
-				.andExpect(jsonPath("$.requestId").isNotEmpty());
+		webTestClient.post()
+				.uri("/api/v1/auth/logout")
+				.exchange()
+				.expectStatus().isUnauthorized()
+				.expectHeader().valueEquals(
+						HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+				.expectBody()
+				.jsonPath("$.type").isEqualTo(
+						"urn:sahha:problem:authentication-required")
+				.jsonPath("$.requestId").isNotEmpty();
 
 		org.junit.jupiter.api.Assertions.assertEquals(
 				0,
@@ -179,13 +196,14 @@ class GatewaySecurityRoutingIntegrationTests {
 	@Test
 	void validCookieIsDecodedAndTheProtectedRequestIsForwarded()
 			throws Exception {
-		when(jwtDecoder.decode(VALID_TOKEN)).thenReturn(validJwt(VALID_TOKEN));
+		when(jwtDecoder.decode(VALID_TOKEN)).thenReturn(Mono.just(
+				validJwt(VALID_TOKEN)));
 
-		mockMvc.perform(post("/api/v1/auth/logout")
-						.cookie(new Cookie(
-								"SAHHA_ACCESS_TOKEN",
-								VALID_TOKEN)))
-				.andExpect(status().isNoContent());
+		webTestClient.post()
+				.uri("/api/v1/auth/logout")
+				.cookie("SAHHA_ACCESS_TOKEN", VALID_TOKEN)
+				.exchange()
+				.expectStatus().isNoContent();
 
 		verify(jwtDecoder).decode(VALID_TOKEN);
 		org.junit.jupiter.api.Assertions.assertEquals(
@@ -199,20 +217,20 @@ class GatewaySecurityRoutingIntegrationTests {
 	@Test
 	void invalidSignatureOrClaimsAreRejectedBeforeRouting()
 			throws Exception {
-		when(jwtDecoder.decode(INVALID_TOKEN)).thenThrow(
+		when(jwtDecoder.decode(INVALID_TOKEN)).thenReturn(Mono.error(
 				new JwtValidationException(
 						"synthetic invalid token",
 						List.of(new OAuth2Error(
 								"invalid_token",
 								"synthetic invalid token",
-								null))));
+								null)))));
 
-		mockMvc.perform(post("/api/v1/auth/logout")
-						.cookie(new Cookie(
-								"SAHHA_ACCESS_TOKEN",
-								INVALID_TOKEN)))
-				.andExpect(status().isUnauthorized())
-				.andExpect(jsonPath("$.status").value(401));
+		webTestClient.post()
+				.uri("/api/v1/auth/logout")
+				.cookie("SAHHA_ACCESS_TOKEN", INVALID_TOKEN)
+				.exchange()
+				.expectStatus().isUnauthorized()
+				.expectBody().jsonPath("$.status").isEqualTo(401);
 
 		verify(jwtDecoder).decode(INVALID_TOKEN);
 		org.junit.jupiter.api.Assertions.assertEquals(
@@ -223,29 +241,29 @@ class GatewaySecurityRoutingIntegrationTests {
 	@Test
 	void platformOrganisationRouteEnforcesRoleBeforeForwarding()
 			throws Exception {
-		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(
-				validJwt(USER_TOKEN, List.of()));
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
 
-		mockMvc.perform(get("/api/v1/platform/organisations")
-						.cookie(new Cookie(
-								"SAHHA_ACCESS_TOKEN",
-								USER_TOKEN)))
-				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.type").value(
-						"urn:sahha:problem:request-forbidden"));
+		webTestClient.get()
+				.uri("/api/v1/platform/organisations")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isForbidden()
+				.expectBody().jsonPath("$.type").isEqualTo(
+						"urn:sahha:problem:request-forbidden");
 		org.junit.jupiter.api.Assertions.assertEquals(
 				0,
 				UPSTREAM_REQUESTS.get());
 
-		when(jwtDecoder.decode(VALID_TOKEN)).thenReturn(
-				validJwt(VALID_TOKEN, List.of("PLATFORM_ADMIN")));
-		mockMvc.perform(get("/api/v1/platform/organisations")
-						.cookie(new Cookie(
-								"SAHHA_ACCESS_TOKEN",
-								VALID_TOKEN)))
-				.andExpect(status().isOk())
-				.andExpect(content().json(
-						"{\"items\":[],\"totalElements\":0}"));
+		when(jwtDecoder.decode(VALID_TOKEN)).thenReturn(Mono.just(
+				validJwt(VALID_TOKEN, List.of("PLATFORM_ADMIN"))));
+		webTestClient.get()
+				.uri("/api/v1/platform/organisations")
+				.cookie("SAHHA_ACCESS_TOKEN", VALID_TOKEN)
+				.exchange()
+				.expectStatus().isOk()
+				.expectBody().json(
+						"{\"items\":[],\"totalElements\":0}");
 
 		org.junit.jupiter.api.Assertions.assertEquals(
 				"/api/v1/platform/organisations",
@@ -261,17 +279,17 @@ class GatewaySecurityRoutingIntegrationTests {
 	@Test
 	void nestedOrganisationAdministratorRouteIsProtectedAndForwarded()
 			throws Exception {
-		when(jwtDecoder.decode(VALID_TOKEN)).thenReturn(
-				validJwt(VALID_TOKEN, List.of("PLATFORM_ADMIN")));
+		when(jwtDecoder.decode(VALID_TOKEN)).thenReturn(Mono.just(
+				validJwt(VALID_TOKEN, List.of("PLATFORM_ADMIN"))));
 		UUID organisationId = UUID.randomUUID();
 
-		mockMvc.perform(get(
+		webTestClient.get()
+				.uri(
 						"/api/v1/platform/organisations/{organisationId}/administrators",
 						organisationId)
-					.cookie(new Cookie(
-							"SAHHA_ACCESS_TOKEN",
-							VALID_TOKEN)))
-				.andExpect(status().isOk());
+				.cookie("SAHHA_ACCESS_TOKEN", VALID_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
 
 		org.junit.jupiter.api.Assertions.assertEquals(
 				"/api/v1/platform/organisations/" + organisationId
@@ -285,14 +303,14 @@ class GatewaySecurityRoutingIntegrationTests {
 	@Test
 	void authenticatedOrganisationContextRouteIsForwardedWithoutPlatformRole()
 			throws Exception {
-		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(
-				validJwt(USER_TOKEN, List.of()));
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
 
-		mockMvc.perform(get("/api/v1/organisations/memberships")
-					.cookie(new Cookie(
-							"SAHHA_ACCESS_TOKEN",
-							USER_TOKEN)))
-				.andExpect(status().isOk());
+		webTestClient.get()
+				.uri("/api/v1/organisations/memberships")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
 
 		org.junit.jupiter.api.Assertions.assertEquals(
 				"/api/v1/organisations/memberships",
@@ -305,14 +323,14 @@ class GatewaySecurityRoutingIntegrationTests {
 	@Test
 	void authenticatedDepartmentRouteIsForwardedToOrganisationService()
 			throws Exception {
-		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(
-				validJwt(USER_TOKEN, List.of()));
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
 
-		mockMvc.perform(get("/api/v1/departments")
-					.cookie(new Cookie(
-							"SAHHA_ACCESS_TOKEN",
-							USER_TOKEN)))
-				.andExpect(status().isOk());
+		webTestClient.get()
+				.uri("/api/v1/departments")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
 
 		org.junit.jupiter.api.Assertions.assertEquals(
 				"/api/v1/departments",
@@ -322,24 +340,24 @@ class GatewaySecurityRoutingIntegrationTests {
 	@Test
 	void authenticatedStaffInvitationRoutesAreForwardedToOrganisationService()
 			throws Exception {
-		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(
-				validJwt(USER_TOKEN, List.of()));
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
 
-		mockMvc.perform(get("/api/v1/my/staff-invitations")
-					.cookie(new Cookie(
-							"SAHHA_ACCESS_TOKEN",
-							USER_TOKEN)))
-				.andExpect(status().isOk());
+		webTestClient.get()
+				.uri("/api/v1/my/staff-invitations")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
 
 		org.junit.jupiter.api.Assertions.assertEquals(
 				"/api/v1/my/staff-invitations",
 				LAST_UPSTREAM_PATH.get());
 
-		mockMvc.perform(get("/api/v1/staff-invitations")
-					.cookie(new Cookie(
-							"SAHHA_ACCESS_TOKEN",
-							USER_TOKEN)))
-				.andExpect(status().isOk());
+		webTestClient.get()
+				.uri("/api/v1/staff-invitations")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
 
 		org.junit.jupiter.api.Assertions.assertEquals(
 				"/api/v1/staff-invitations",
@@ -349,23 +367,23 @@ class GatewaySecurityRoutingIntegrationTests {
 	@Test
 	void authenticatedStaffDirectoryAndDoctorProfileRoutesAreForwarded()
 			throws Exception {
-		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(
-				validJwt(USER_TOKEN, List.of()));
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
 
-		mockMvc.perform(get("/api/v1/staff")
-					.cookie(new Cookie(
-							"SAHHA_ACCESS_TOKEN",
-							USER_TOKEN)))
-				.andExpect(status().isOk());
+		webTestClient.get()
+				.uri("/api/v1/staff")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
 		org.junit.jupiter.api.Assertions.assertEquals(
 				"/api/v1/staff",
 				LAST_UPSTREAM_PATH.get());
 
-		mockMvc.perform(get("/api/v1/my/doctor-profile")
-					.cookie(new Cookie(
-							"SAHHA_ACCESS_TOKEN",
-							USER_TOKEN)))
-				.andExpect(status().isOk());
+		webTestClient.get()
+				.uri("/api/v1/my/doctor-profile")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
 		org.junit.jupiter.api.Assertions.assertEquals(
 				"/api/v1/my/doctor-profile",
 				LAST_UPSTREAM_PATH.get());
@@ -374,14 +392,14 @@ class GatewaySecurityRoutingIntegrationTests {
 	@Test
 	void authenticatedPatientRegistryRouteIsForwardedToPatientService()
 			throws Exception {
-		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(
-				validJwt(USER_TOKEN, List.of()));
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
 
-		mockMvc.perform(get("/api/v1/patients")
-					.cookie(new Cookie(
-							"SAHHA_ACCESS_TOKEN",
-							USER_TOKEN)))
-				.andExpect(status().isOk());
+		webTestClient.get()
+				.uri("/api/v1/patients")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
 
 		org.junit.jupiter.api.Assertions.assertEquals(
 				"/api/v1/patients",
@@ -392,28 +410,239 @@ class GatewaySecurityRoutingIntegrationTests {
 	}
 
 	@Test
+	void authenticatedAvailabilityRouteIsForwardedToSchedulingService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
+
+		webTestClient.get()
+				.uri("/api/v1/availability/doctors")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/availability/doctors",
+				LAST_UPSTREAM_PATH.get());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				List.of("SAHHA_ACCESS_TOKEN=" + USER_TOKEN),
+				UPSTREAM_COOKIES);
+	}
+
+	@Test
+	void authenticatedAppointmentRouteIsForwardedToSchedulingService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
+
+		webTestClient.post()
+				.uri("/api/v1/appointments")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.bodyValue("{}")
+				.exchange()
+				.expectStatus().isOk();
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/appointments",
+				LAST_UPSTREAM_PATH.get());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				List.of("SAHHA_ACCESS_TOKEN=" + USER_TOKEN),
+				UPSTREAM_COOKIES);
+	}
+
+	@Test
+	void authenticatedConsultationRouteIsForwardedToClinicalService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
+
+		webTestClient.post()
+				.uri("/api/v1/consultations")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.bodyValue("{}")
+				.exchange()
+				.expectStatus().isOk();
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/consultations",
+				LAST_UPSTREAM_PATH.get());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				List.of("SAHHA_ACCESS_TOKEN=" + USER_TOKEN),
+				UPSTREAM_COOKIES);
+	}
+
+	@Test
+	void authenticatedClinicalSummaryRouteIsForwardedToClinicalService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
+		UUID patientRegistrationId = UUID.randomUUID();
+
+		webTestClient.get()
+				.uri("/api/v1/clinical/patients/{id}/summary",
+						patientRegistrationId)
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/clinical/patients/" + patientRegistrationId + "/summary",
+				LAST_UPSTREAM_PATH.get());
+	}
+
+	@Test
+	void authenticatedConversationRouteIsForwardedToCommunicationService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
+
+		webTestClient.get()
+				.uri("/api/v1/conversations")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/conversations", LAST_UPSTREAM_PATH.get());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				List.of("SAHHA_ACCESS_TOKEN=" + USER_TOKEN), UPSTREAM_COOKIES);
+	}
+
+	@Test
+	void authenticatedFileUploadRouteIsForwardedToFileService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of("DOCTOR"))));
+
+		webTestClient.put()
+				.uri("/api/v1/files/{fileId}/content", UUID.randomUUID())
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.header("X-Upload-Token", "one-time-ticket")
+				.contentType(MediaType.APPLICATION_PDF)
+				.bodyValue("synthetic")
+				.exchange()
+				.expectStatus().isOk();
+
+		org.junit.jupiter.api.Assertions.assertTrue(
+				LAST_UPSTREAM_PATH.get().startsWith("/api/v1/files/"));
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"one-time-ticket",
+				LAST_UPSTREAM_HEADERS.get().getFirst("X-Upload-Token"));
+	}
+
+	@Test
+	void authenticatedFileDownloadGrantIsForwardedToFileService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of("DOCTOR"))));
+		UUID fileId = UUID.randomUUID();
+
+		webTestClient.get()
+				.uri("/api/v1/files/{fileId}/content", fileId)
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.header("X-Download-Token", "one-time-download-grant")
+				.exchange()
+				.expectStatus().isOk();
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/files/" + fileId + "/content",
+				LAST_UPSTREAM_PATH.get());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"one-time-download-grant",
+				LAST_UPSTREAM_HEADERS.get().getFirst("X-Download-Token"));
+	}
+
+	@Test
+	void authenticatedNotificationRouteIsForwardedToNotificationService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of())));
+
+		webTestClient.get()
+				.uri("/api/v1/notifications/unread-count")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/notifications/unread-count",
+				LAST_UPSTREAM_PATH.get());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				List.of("SAHHA_ACCESS_TOKEN=" + USER_TOKEN),
+				UPSTREAM_COOKIES);
+	}
+
+	@Test
 	void configuredFrontendReceivesCredentialedCorsPreflight()
 			throws Exception {
-		mockMvc.perform(options("/api/v1/auth/login")
-						.header(HttpHeaders.ORIGIN, "http://localhost:5173")
-						.header(
-								HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD,
-								"POST")
-						.header(
-								HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
-								"content-type,x-xsrf-token"))
-				.andExpect(status().isOk())
-				.andExpect(header().string(
+		webTestClient.options()
+				.uri("/api/v1/auth/login")
+				.header(HttpHeaders.ORIGIN, "http://localhost:5173")
+				.header(
+						HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD,
+						"POST")
+				.header(
+						HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+						"content-type,x-xsrf-token")
+				.exchange()
+				.expectStatus().isOk()
+				.expectHeader().valueEquals(
 						HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
-						"http://localhost:5173"))
-				.andExpect(header().string(
+						"http://localhost:5173")
+				.expectHeader().valueEquals(
 						HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS,
-						"true"));
+						"true");
 
 		verifyNoInteractions(jwtDecoder);
 		org.junit.jupiter.api.Assertions.assertEquals(
 				0,
 				UPSTREAM_REQUESTS.get());
+	}
+
+	@Test
+	void configuredFrontendMaySendTheOneTimeUploadHeader()
+			throws Exception {
+		webTestClient.options()
+				.uri("/api/v1/files/{fileId}/content", UUID.randomUUID())
+				.header(HttpHeaders.ORIGIN, "http://localhost:5173")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PUT")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+						"content-type,x-xsrf-token,x-upload-token")
+				.exchange()
+				.expectStatus().isOk()
+				.expectHeader().valueEquals(
+						HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
+						"http://localhost:5173")
+				.expectHeader().value(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+						value -> org.junit.jupiter.api.Assertions.assertTrue(
+								value.toLowerCase().contains("x-upload-token")));
+
+		verifyNoInteractions(jwtDecoder);
+		org.junit.jupiter.api.Assertions.assertEquals(0, UPSTREAM_REQUESTS.get());
+	}
+
+	@Test
+	void configuredFrontendMaySendTheOneTimeDownloadHeader()
+			throws Exception {
+		webTestClient.options()
+				.uri("/api/v1/files/{fileId}/content", UUID.randomUUID())
+				.header(HttpHeaders.ORIGIN, "http://localhost:5173")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+						"x-download-token")
+				.exchange()
+				.expectStatus().isOk()
+				.expectHeader().valueEquals(
+						HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
+						"http://localhost:5173")
+				.expectHeader().value(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+						value -> org.junit.jupiter.api.Assertions.assertTrue(
+								value.toLowerCase().contains("x-download-token")));
+
+		verifyNoInteractions(jwtDecoder);
+		org.junit.jupiter.api.Assertions.assertEquals(0, UPSTREAM_REQUESTS.get());
 	}
 
 	private static Jwt validJwt(String tokenValue) {

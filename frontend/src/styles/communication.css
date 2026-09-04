@@ -1,0 +1,64 @@
+.connected-messenger > aside > button {
+  position: relative;
+}
+
+.conversation-unread {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--coral, #cf796d);
+  color: #fff;
+  font: 700 7px DM Mono;
+}
+
+.communication-inline-state {
+  min-height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.communication-inline-state .secondary {
+  width: auto;
+  min-height: 38px;
+  display: flex;
+  grid-template-columns: none;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.communication-access-boundary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--teal, #6c9a8b) 11%, var(--surface));
+  color: var(--teal, #6c9a8b);
+  font-size: 7px;
+  white-space: nowrap;
+}
+
+.communication-access-boundary svg {
+  width: 13px;
+  height: 13px;
+}
+
+@media (max-width: 620px) {
+  .communication-access-boundary {
+    display: none;
+  }
+}

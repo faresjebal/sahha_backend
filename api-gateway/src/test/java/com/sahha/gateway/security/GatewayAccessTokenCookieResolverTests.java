@@ -3,9 +3,11 @@ package com.sahha.gateway.security;
 import java.net.URI;
 import java.util.List;
 
-import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.http.HttpCookie;
+import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
+import org.springframework.mock.web.server.MockServerWebExchange;
+import org.springframework.security.oauth2.server.resource.authentication.BearerTokenAuthenticationToken;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 
 import com.sahha.gateway.config.GatewaySecurityProperties;
@@ -21,49 +23,60 @@ class GatewayAccessTokenCookieResolverTests {
 
 	@Test
 	void protectedRequestUsesExactlyOneWellFormedAccessCookie() {
-		MockHttpServletRequest request =
-				new MockHttpServletRequest("POST", "/api/v1/auth/logout");
-		request.setCookies(new Cookie("SAHHA_ACCESS_TOKEN", "aaa.bbb.ccc"));
+		MockServerWebExchange exchange = exchange(
+				MockServerHttpRequest.post("/api/v1/auth/logout")
+						.cookie(new HttpCookie(
+								"SAHHA_ACCESS_TOKEN", "aaa.bbb.ccc")));
 
-		assertEquals("aaa.bbb.ccc", resolver.resolve(request));
+		BearerTokenAuthenticationToken authentication =
+				(BearerTokenAuthenticationToken) resolver.convert(exchange).block();
+		assertEquals("aaa.bbb.ccc", authentication.getToken());
 	}
 
 	@Test
 	void publicRefreshIgnoresAnExpiredOrMalformedAccessCookie() {
-		MockHttpServletRequest request =
-				new MockHttpServletRequest("POST", "/api/v1/auth/refresh");
-		request.setCookies(new Cookie("SAHHA_ACCESS_TOKEN", "not-a-jwt"));
+		MockServerWebExchange exchange = exchange(
+				MockServerHttpRequest.post("/api/v1/auth/refresh")
+						.cookie(new HttpCookie(
+								"SAHHA_ACCESS_TOKEN", "not-a-jwt")));
 
-		assertNull(resolver.resolve(request));
+		assertNull(resolver.convert(exchange).block());
 	}
 
 	@Test
 	void protectedRequestRejectsMalformedAndDuplicateCookies() {
-		MockHttpServletRequest malformed =
-				new MockHttpServletRequest("POST", "/api/v1/auth/logout");
-		malformed.setCookies(
-				new Cookie("SAHHA_ACCESS_TOKEN", "not-a-jwt"));
+		MockServerWebExchange malformed = exchange(
+				MockServerHttpRequest.post("/api/v1/auth/logout")
+						.cookie(new HttpCookie(
+								"SAHHA_ACCESS_TOKEN", "not-a-jwt")));
 		assertThrows(
 				OAuth2AuthenticationException.class,
-				() -> resolver.resolve(malformed));
+				() -> resolver.convert(malformed).block());
 
-		MockHttpServletRequest duplicate =
-				new MockHttpServletRequest("POST", "/api/v1/auth/logout");
-		duplicate.setCookies(
-				new Cookie("SAHHA_ACCESS_TOKEN", "aaa.bbb.ccc"),
-				new Cookie("SAHHA_ACCESS_TOKEN", "ddd.eee.fff"));
+		MockServerWebExchange duplicate = exchange(
+				MockServerHttpRequest.post("/api/v1/auth/logout")
+						.cookie(
+								new HttpCookie(
+										"SAHHA_ACCESS_TOKEN", "aaa.bbb.ccc"),
+								new HttpCookie(
+										"SAHHA_ACCESS_TOKEN", "ddd.eee.fff")));
 		assertThrows(
 				OAuth2AuthenticationException.class,
-				() -> resolver.resolve(duplicate));
+				() -> resolver.convert(duplicate).block());
 	}
 
 	@Test
 	void authorizationHeaderIsNeverAcceptedAsBrowserAuthentication() {
-		MockHttpServletRequest request =
-				new MockHttpServletRequest("POST", "/api/v1/auth/logout");
-		request.addHeader("Authorization", "Bearer aaa.bbb.ccc");
+		MockServerWebExchange exchange = exchange(
+				MockServerHttpRequest.post("/api/v1/auth/logout")
+						.header("Authorization", "Bearer aaa.bbb.ccc"));
 
-		assertNull(resolver.resolve(request));
+		assertNull(resolver.convert(exchange).block());
+	}
+
+	private static MockServerWebExchange exchange(
+			MockServerHttpRequest.BaseBuilder<?> request) {
+		return MockServerWebExchange.from(request.build());
 	}
 
 	private static GatewaySecurityProperties properties() {

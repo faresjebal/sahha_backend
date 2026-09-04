@@ -1,21 +1,23 @@
 package com.sahha.gateway.security;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
-import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.authentication.BearerTokenAuthenticationToken;
+import org.springframework.security.web.server.authentication.ServerAuthenticationConverter;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
 
 import com.sahha.gateway.config.GatewaySecurityProperties;
 
 public final class GatewayAccessTokenCookieResolver
-		implements BearerTokenResolver {
+		implements ServerAuthenticationConverter {
 
 	private static final Pattern JWT_VALUE =
 			Pattern.compile("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$");
@@ -41,54 +43,45 @@ public final class GatewayAccessTokenCookieResolver
 	}
 
 	@Override
-	public String resolve(HttpServletRequest request) {
-		if (isPublicRequest(request)) {
-			return null;
+	public Mono<Authentication> convert(ServerWebExchange exchange) {
+		if (isPublicRequest(exchange)) {
+			return Mono.empty();
 		}
-		List<String> values = cookieValues(request.getCookies());
-		if (values.isEmpty()) {
-			return null;
+		List<HttpCookie> values = exchange.getRequest().getCookies().get(cookieName);
+		if (values == null || values.isEmpty()) {
+			return Mono.empty();
 		}
 		if (values.size() != 1) {
-			throw new OAuth2AuthenticationException(INVALID_REQUEST);
+			return invalid();
 		}
-		String value = values.getFirst();
-		if (value.length() > MAXIMUM_JWT_LENGTH
+		String value = values.getFirst().getValue();
+		if (value == null || value.isBlank()
+				|| value.length() > MAXIMUM_JWT_LENGTH
 				|| !JWT_VALUE.matcher(value).matches()) {
-			throw new OAuth2AuthenticationException(INVALID_REQUEST);
+			return invalid();
 		}
-		return value;
+		return Mono.just(new BearerTokenAuthenticationToken(value));
 	}
 
-	private List<String> cookieValues(Cookie[] cookies) {
-		List<String> values = new ArrayList<>();
-		if (cookies == null) {
-			return values;
-		}
-		for (Cookie cookie : cookies) {
-			if (cookieName.equals(cookie.getName())
-					&& cookie.getValue() != null
-					&& !cookie.getValue().isBlank()) {
-				values.add(cookie.getValue());
-			}
-		}
-		return values;
+	private static Mono<Authentication> invalid() {
+		return Mono.error(new OAuth2AuthenticationException(INVALID_REQUEST));
 	}
 
-	private static boolean isPublicRequest(HttpServletRequest request) {
-		if (HttpMethod.OPTIONS.matches(request.getMethod())) {
+	private static boolean isPublicRequest(ServerWebExchange exchange) {
+		HttpMethod method = exchange.getRequest().getMethod();
+		if (HttpMethod.OPTIONS.equals(method)) {
 			return true;
 		}
-		String path = request.getRequestURI();
+		String path = exchange.getRequest().getPath().value();
 		if (path.startsWith("/actuator/health")
 				|| path.equals("/.well-known/jwks.json")) {
 			return true;
 		}
-		if (HttpMethod.GET.matches(request.getMethod())
+		if (HttpMethod.GET.equals(method)
 				&& path.equals("/api/v1/auth/csrf")) {
 			return true;
 		}
-		return HttpMethod.POST.matches(request.getMethod())
+		return HttpMethod.POST.equals(method)
 				&& PUBLIC_AUTH_POST_PATHS.contains(path);
 	}
 }
