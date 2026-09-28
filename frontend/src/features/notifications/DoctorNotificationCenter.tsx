@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Radio,
   RefreshCw,
+  Share2,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -21,6 +22,7 @@ import type {
 } from '../../models/notification'
 import { apiErrorMessage } from '../../services/api/ApiError'
 import { notificationRestService } from '../../services/api/notificationRestService'
+import { patientNotificationRestService } from '../../services/api/patientNotificationRestService'
 import {
   NotificationRealtimeClient,
   type NotificationConnectionState,
@@ -37,9 +39,11 @@ const defaultRealtimeClientFactory: RealtimeClientFactory = callbacks =>
   new NotificationRealtimeClient(callbacks)
 
 export interface DoctorNotificationCenterProps {
+  patientRegistrationId?: string
   service?: NotificationService
   createRealtimeClient?: RealtimeClientFactory
   enabled?: boolean
+  navigationTargets?: { appointment?: string; conversation?: string; referral?: string }
 }
 
 const listKey = (organisationId: string) => [
@@ -50,14 +54,26 @@ const unreadKey = (organisationId: string) => [
 ] as const
 
 const notificationTitle = (notification: NotificationResource) => ({
+  APPOINTMENT_CONFIRMED:'Appointment confirmed',
+  APPOINTMENT_REJECTED:'Appointment request declined',
+  APPOINTMENT_STARTED:'Appointment started',
+  APPOINTMENT_COMPLETED:'Appointment completed',
+  APPOINTMENT_NO_SHOW:'Appointment marked as missed',
   APPOINTMENT_REQUESTED:'New appointment request',
   APPOINTMENT_RESCHEDULED:'Appointment rescheduled',
   APPOINTMENT_CANCELLED:'Appointment cancelled',
   PATIENT_CHECKED_IN:'Patient checked in',
   MESSAGE_RECEIVED:'New secure message',
+  REFERRAL_RECEIVED:'New referral request',
+  REFERRAL_ACCEPTED:'Referral accepted',
+  REFERRAL_REJECTED:'Referral declined',
+  REFERRAL_REVOKED:'Referral revoked',
+  REFERRAL_COMPLETED:'Referral completed',
+  REFERRAL_EXPIRED:'Referral expired',
 }[notification.notificationType])
 
 const formatAppointmentTime = (notification: NotificationResource) => {
+  if (notification.resourceType === 'REFERRAL') return 'Open referrals to review the current status'
   if (!notification.appointmentStartsAt) return 'Open the private conversation'
   try {
     return new Intl.DateTimeFormat(undefined, {
@@ -83,9 +99,11 @@ const connectionLabel: Record<NotificationConnectionState, string> = {
 }
 
 export function DoctorNotificationCenter({
-  service = notificationRestService,
-  createRealtimeClient = defaultRealtimeClientFactory,
+  service: suppliedService,
+  createRealtimeClient: suppliedRealtimeClient,
+  patientRegistrationId,
   enabled = !env.useAuthMocks,
+  navigationTargets = { appointment:'/doctor/appointments', conversation:'/doctor/messages', referral:'/doctor/referrals' },
 }: DoctorNotificationCenterProps) {
   const auth = useAuth()
   const navigate = useNavigate()
@@ -93,7 +111,15 @@ export function DoctorNotificationCenter({
   const panelRef = useRef<HTMLDivElement>(null)
   const organisationId = auth.session?.user.organizationId || ''
   const userId = auth.session?.user.id || ''
-  const liveEnabled = enabled && Boolean(organisationId && userId)
+  const patientMode = patientRegistrationId !== undefined
+  const scope = patientMode ? 'patient:' + userId + ':' + patientRegistrationId : organisationId
+  const service = useMemo(() => suppliedService || (patientMode
+    ? patientNotificationRestService(patientRegistrationId!) : notificationRestService),
+  [suppliedService, patientMode, patientRegistrationId])
+  const createRealtimeClient = useMemo(() => suppliedRealtimeClient || (patientMode
+    ? (callbacks: NotificationRealtimeCallbacks) => new NotificationRealtimeClient(callbacks, { patientRegistrationId })
+    : defaultRealtimeClientFactory), [suppliedRealtimeClient, patientMode, patientRegistrationId])
+  const liveEnabled = enabled && Boolean(userId && (patientMode ? patientRegistrationId : organisationId))
   const [open, setOpen] = useState(false)
   const [connection, setConnection] = useState<NotificationConnectionState>(
     'offline',
@@ -101,12 +127,12 @@ export function DoctorNotificationCenter({
   const [realtimeWarning, setRealtimeWarning] = useState('')
 
   const notificationsKey = useMemo(
-    () => listKey(organisationId),
-    [organisationId],
+    () => listKey(scope),
+    [scope],
   )
   const notificationUnreadKey = useMemo(
-    () => unreadKey(organisationId),
-    [organisationId],
+    () => unreadKey(scope),
+    [scope],
   )
   const inboxQuery = useQuery({
     queryKey:notificationsKey,
@@ -146,11 +172,19 @@ export function DoctorNotificationCenter({
       setRealtimeWarning('')
       void queryClient.invalidateQueries({ queryKey:notificationsKey })
       void queryClient.invalidateQueries({ queryKey:notificationUnreadKey })
+      if (patientMode) {
+        void queryClient.invalidateQueries({ queryKey:['my-patient-appointments', patientRegistrationId] })
+        void queryClient.invalidateQueries({ queryKey:['my-patient-slots', patientRegistrationId] })
+      } else {
+        void queryClient.invalidateQueries({ queryKey:['referrals', userId, organisationId] })
+        void queryClient.invalidateQueries({ queryKey:['referral', userId, organisationId] })
+      }
     }
     const receiveNotification = ({
       notification,
     }: RealtimeNotificationMessage) => {
       if (!active) return
+      if (patientMode && notification.resourceType !== 'APPOINTMENT') return
       let alreadyKnown = false
       queryClient.setQueryData<NotificationPageResource>(
         notificationsKey,
@@ -186,8 +220,14 @@ export function DoctorNotificationCenter({
       }
       if (notification.resourceType === 'APPOINTMENT') {
         void queryClient.invalidateQueries({
-          queryKey:['appointments', organisationId],
+          queryKey:patientMode
+            ? ['my-patient-appointments', patientRegistrationId] : ['appointments', organisationId],
         })
+        if (patientMode) void queryClient.invalidateQueries({ queryKey:['my-patient-slots', patientRegistrationId] })
+      }
+      if (notification.resourceType === 'REFERRAL') {
+        void queryClient.invalidateQueries({ queryKey:['referrals', userId, organisationId] })
+        void queryClient.invalidateQueries({ queryKey:['referral', userId, organisationId, notification.resourceId] })
       }
     }
     const realtimeClient = createRealtimeClient({
@@ -213,6 +253,8 @@ export function DoctorNotificationCenter({
     organisationId,
     queryClient,
     userId,
+    patientMode,
+    patientRegistrationId,
   ])
 
   const markRead = useMutation({
@@ -290,11 +332,14 @@ export function DoctorNotificationCenter({
     if (!notification.read && !markRead.isPending) {
       markRead.mutate(notification.id)
     }
-    if (notification.resourceType === 'APPOINTMENT') {
-      navigate('/doctor/appointments')
+    if (notification.resourceType === 'APPOINTMENT' && navigationTargets.appointment) {
+      navigate(navigationTargets.appointment)
       setOpen(false)
-    } else if (notification.resourceType === 'CONVERSATION') {
-      navigate('/doctor/messages')
+    } else if (notification.resourceType === 'CONVERSATION' && navigationTargets.conversation) {
+      navigate(navigationTargets.conversation)
+      setOpen(false)
+    } else if (notification.resourceType === 'REFERRAL' && navigationTargets.referral) {
+      navigate(navigationTargets.referral)
       setOpen(false)
     }
   }
@@ -327,7 +372,7 @@ export function DoctorNotificationCenter({
     >
       <header>
         <div>
-          <p className="eyebrow">Private organisation inbox</p>
+          <p className="eyebrow">{patientMode ? 'Your private appointment inbox' : 'Private organisation inbox'}</p>
           <h2>Notifications</h2>
         </div>
         <button
@@ -344,7 +389,7 @@ export function DoctorNotificationCenter({
         {realtimeWarning} Inbox recovery remains available.
       </p>}
       <div className="notification-panel-actions">
-        <span>{unreadCount} unread</span>
+        <span>{unreadQuery.isError ? 'Unread count unavailable' : `${unreadCount} unread`}</span>
         <button
           type="button"
           disabled={!unreadCount || markAllRead.isPending}
@@ -356,6 +401,8 @@ export function DoctorNotificationCenter({
           Mark all read
         </button>
       </div>
+      {unreadQuery.isError&&<p className="notification-warning" role="alert">Unread count could not be loaded. <button type="button" onClick={() => unreadQuery.refetch()}>Retry count</button></p>}
+      {inboxQuery.data && inboxQuery.data.totalElements > 20 && <p className="notification-warning">Showing your latest 20 notifications.</p>}
 
       {!liveEnabled&&<div className="notification-panel-state">
         <Bell/><strong>Live inbox paused in role preview.</strong>
@@ -379,7 +426,7 @@ export function DoctorNotificationCenter({
         >
           <span className="notification-list__icon">{notification.resourceType === 'CONVERSATION'
             ? <MessageSquare/>
-            : <CalendarClock/>}</span>
+            : notification.resourceType === 'REFERRAL' ? <Share2/> : <CalendarClock/>}</span>
           <span>
             <strong>{notificationTitle(notification)}</strong>
             <small>{formatAppointmentTime(notification)}</small>
@@ -389,7 +436,7 @@ export function DoctorNotificationCenter({
         </button>)}
         {!notifications.length&&<div className="notification-panel-state">
           <Bell/><strong>You are all caught up.</strong>
-          <span>New appointment and secure-message activity will appear here.</span>
+          <span>{patientMode ? 'Updates to your appointments will appear here.' : 'New appointment, referral and secure-message activity will appear here.'}</span>
         </div>}
       </div>}
       {mutationError&&<p className="notification-warning" role="alert">

@@ -107,6 +107,23 @@ describe('Gateway Auth REST integration', () => {
     expect(session.user.permissions).toEqual(['platform:admin'])
   })
 
+  it.each([true, false])('maps all and only assigned organisation permissions, Doctor assigned: %s', async isDoctor => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ ...sessionResponse(), activeOrganisationId:'org-a', organisationRoles:isDoctor ? ['ORGANIZATION_ADMIN','DOCTOR'] : ['ORGANIZATION_ADMIN'] })))
+    const session = await authRestService.restoreSession()
+    expect(session?.user.role).toBe('hospital-super-admin')
+    expect(session?.user.permissions).toContain('hospital:access')
+    expect(session?.user.permissions.includes('patient:read:clinical')).toBe(isDoctor)
+    expect(session?.user.permissions.includes('patient:write:clinical')).toBe(isDoctor)
+    expect(session?.organisationRoles).toEqual(isDoctor ? ['ORGANIZATION_ADMIN','DOCTOR'] : ['ORGANIZATION_ADMIN'])
+  })
+
+  it('does not map an organisation role without an active organisation', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ ...sessionResponse(), activeOrganisationId:null, organisationRoles:['DOCTOR','ORGANIZATION_ADMIN'] })))
+    const session = await authRestService.restoreSession()
+    expect(session?.user.role).toBe('patient')
+    expect(session?.user.permissions).toEqual(['patient:read:self','appointment:manage:self'])
+  })
+
   it('selects a scoped organisation and notifies the other browser tabs', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(csrfResponse())

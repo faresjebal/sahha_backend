@@ -1,4 +1,5 @@
-import type { AuthSession, LoginRequest, Permission, RegisterAccountRequest, SessionUser } from '../../models/auth'
+import type { AuthSession, LoginRequest, RegisterAccountRequest, SessionUser } from '../../models/auth'
+import { canonicalRoles, resolveSessionAccess } from '../../app/auth/sessionAccess'
 import { broadcastActiveOrganisationChange } from '../../app/auth/browserAuthContext'
 import { ApiError } from './ApiError'
 import { withBrowserRefreshLock } from './browserRefreshLock'
@@ -27,14 +28,6 @@ interface UiIdentity {
 }
 
 const UI_IDENTITY_KEY = 'sahha-auth-ui-identity-v1'
-
-const rolePermissions: Record<'patient' | 'doctor' | 'hospital-super-admin' | 'receptionist' | 'platform-admin', Permission[]> = {
-  patient:['patient:read:self', 'appointment:manage:self'],
-  doctor:['patient:read:clinical', 'patient:write:clinical', 'appointment:manage:practice'],
-  'hospital-super-admin':['patient:read:administrative', 'appointment:manage:hospital', 'hospital:operations', 'hospital:access', 'hospital:audit'],
-  receptionist:['patient:read:administrative', 'patient:write:administrative'],
-  'platform-admin':['platform:admin'],
-}
 
 const displayNameFromEmail = (email: string) => email
   .split('@')[0]
@@ -65,16 +58,6 @@ const writeUiIdentity = (identity: UiIdentity) =>
 
 const clearUiIdentity = () => sessionStorage.removeItem(UI_IDENTITY_KEY)
 
-const sessionRole = (
-  platformRoles: string[],
-  organisationRoles: string[],
-): 'patient' | 'doctor' | 'hospital-super-admin' | 'receptionist' | 'platform-admin' => {
-  if (organisationRoles.includes('ORGANIZATION_ADMIN')) return 'hospital-super-admin'
-  if (organisationRoles.includes('DOCTOR')) return 'doctor'
-  if (organisationRoles.includes('RECEPTIONIST')) return 'receptionist'
-  return platformRoles.includes('PLATFORM_ADMIN') ? 'platform-admin' : 'patient'
-}
-
 const toAuthSession = (
   resource: CurrentSessionResource,
   suppliedIdentity?: Omit<UiIdentity, 'userId'>,
@@ -84,17 +67,14 @@ const toAuthSession = (
     email:'',
     displayName:`Sahha user ${resource.userId.slice(0, 8)}`,
   }
-  const role = sessionRole(
-    resource.platformRoles || [],
-    resource.organisationRoles || [],
-  )
+  const access = resolveSessionAccess(resource.activeOrganisationId, resource.organisationRoles, resource.platformRoles)
   const user: SessionUser = {
     id:resource.userId,
     email:identity.email,
     displayName:identity.displayName,
     initials:initialsFromName(identity.displayName),
-    role,
-    permissions:rolePermissions[role],
+    role:access.roles[0] || 'patient', // Default landing page, not the complete authority.
+    permissions:access.permissions,
     ...(resource.activeOrganisationId
       ? { organizationId:resource.activeOrganisationId }
       : {}),
@@ -102,8 +82,8 @@ const toAuthSession = (
   return {
     user,
     expiresAt:resource.accessTokenExpiresAt,
-    platformRoles:resource.platformRoles || [],
-    organisationRoles:resource.organisationRoles || [],
+    platformRoles:canonicalRoles(resource.platformRoles),
+    organisationRoles:canonicalRoles(resource.organisationRoles),
   }
 }
 
@@ -197,6 +177,7 @@ export const authRestService: AuthService = {
       displayName:displayNameFromEmail(request.email),
     }
     writeUiIdentity({ userId:resource.userId, ...identity })
+    broadcastActiveOrganisationChange()
     return toAuthSession(resource, identity)
   },
 
@@ -218,6 +199,7 @@ export const authRestService: AuthService = {
     } finally {
       httpClient.invalidateCsrfToken()
       clearUiIdentity()
+      broadcastActiveOrganisationChange()
     }
   },
 }

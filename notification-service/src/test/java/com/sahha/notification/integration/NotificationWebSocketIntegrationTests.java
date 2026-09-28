@@ -80,6 +80,9 @@ class NotificationWebSocketIntegrationTests {
 	private ConsumedAppointmentEventRepository consumedRepository;
 
 	@Autowired
+	private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+	@Autowired
 	private SimpUserRegistry simpUserRegistry;
 
 	@MockitoBean
@@ -87,6 +90,9 @@ class NotificationWebSocketIntegrationTests {
 
 	@MockitoBean
 	private OrganisationContextClient organisationContextClient;
+
+	@MockitoBean
+	private com.sahha.notification.patient.PatientNotificationAccess patientAccess;
 
 	private ThreadPoolTaskScheduler taskScheduler;
 	private WebSocketStompClient stompClient;
@@ -172,6 +178,41 @@ class NotificationWebSocketIntegrationTests {
 							notification.getSourceEventId()))
 					.forEach(notificationRepository::delete);
 			cursorRepository.deleteById(appointmentId);
+			jdbc.update("DELETE FROM patient_appointment_notification WHERE source_event_id = ?", eventId);
+			consumedRepository.deleteById(eventId);
+		}
+	}
+
+	@Test
+	void revocationClosesAnExistingSubscriptionBeforeDeliveringANewNotification() throws Exception {
+		UUID userId = UUID.randomUUID();
+		UUID organisationId = UUID.randomUUID();
+		workspace(FIRST_TOKEN, userId, organisationId);
+		BlockingQueue<RealtimeNotificationMessage> messages = new LinkedBlockingQueue<>();
+		firstSession = connectAndSubscribe(FIRST_TOKEN,
+				NotificationPrincipalName.of(userId, organisationId), messages);
+		// The real broker/transport remains connected; only its next authentication decision changes.
+		when(jwtDecoder.decode(FIRST_TOKEN)).thenThrow(
+				new org.springframework.security.oauth2.jwt.BadJwtException("Synthetic revoked session"));
+		UUID eventId = UUID.randomUUID();
+		UUID appointmentId = UUID.randomUUID();
+		try {
+			assertEquals(AppointmentEventProcessingResult.NOTIFICATION_CREATED,
+					appointmentNotificationService.consume(event(eventId, appointmentId, organisationId, userId),
+							new AppointmentEventSource("revoked-realtime-test-" + eventId, 0, 0)));
+			org.awaitility.Awaitility.await().atMost(5, TimeUnit.SECONDS)
+					.until(() -> !firstSession.isConnected());
+			assertNull(messages.poll(250, TimeUnit.MILLISECONDS));
+			// The durable inbox survives failed live delivery for a later, newly authenticated session.
+			org.junit.jupiter.api.Assertions.assertTrue(notificationRepository.findAll().stream()
+					.anyMatch(notification -> eventId.equals(notification.getSourceEventId())));
+		}
+		finally {
+			notificationRepository.findAll().stream()
+					.filter(notification -> eventId.equals(notification.getSourceEventId()))
+					.forEach(notificationRepository::delete);
+			cursorRepository.deleteById(appointmentId);
+			jdbc.update("DELETE FROM patient_appointment_notification WHERE source_event_id = ?", eventId);
 			consumedRepository.deleteById(eventId);
 		}
 	}
@@ -185,6 +226,77 @@ class NotificationWebSocketIntegrationTests {
 		assertThrows(
 				ExecutionException.class,
 				() -> connect(FIRST_TOKEN, false).get(5, TimeUnit.SECONDS));
+	}
+
+	@org.junit.jupiter.params.ParameterizedTest
+	@org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+	void patientDeliveryIsSeparateAndOpenSocketLosesAccessOnRevocation(boolean revokeSession) throws Exception {
+		UUID user = UUID.randomUUID(), organisation = UUID.randomUUID(), patient = UUID.randomUUID(), registration = UUID.randomUUID();
+		var context = new com.sahha.notification.patient.PatientNotificationContext(registration, patient, organisation, "ACTIVE", user);
+		var staffJwt = jwt(FIRST_TOKEN, user, organisation);
+		var claims = new java.util.HashMap<>(staffJwt.getClaims());
+		claims.remove("org_id"); claims.put("org_roles", List.of());
+		var patientJwt = new Jwt(FIRST_TOKEN, staffJwt.getIssuedAt(), staffJwt.getExpiresAt(), staffJwt.getHeaders(), claims);
+		when(jwtDecoder.decode(FIRST_TOKEN)).thenReturn(patientJwt);
+		when(patientAccess.requireOwnRegistration(org.mockito.ArgumentMatchers.eq(registration), org.mockito.ArgumentMatchers.any()))
+				.thenReturn(context);
+		workspace(SECOND_TOKEN, user, organisation);
+		var patientMessages = new LinkedBlockingQueue<RealtimeNotificationMessage>();
+		var staffMessages = new LinkedBlockingQueue<RealtimeNotificationMessage>();
+		String path = "/api/v1/notifications/patient/ws?registrationId=" + registration;
+		firstSession = connect(FIRST_TOKEN, true, path).get(5, TimeUnit.SECONDS);
+		firstSession.subscribe(NotificationWebSocketConfiguration.USER_DESTINATION, new RealtimeFrameHandler(patientMessages));
+		awaitRegisteredSubscription(context.principalName());
+		secondSession = connectAndSubscribe(SECOND_TOKEN, NotificationPrincipalName.of(user, organisation), staffMessages);
+		java.util.List<UUID> events = new java.util.ArrayList<>();
+		java.util.List<UUID> appointments = new java.util.ArrayList<>();
+		try {
+			for (int index = 0; index < 2; index++) {
+				UUID eventId = UUID.randomUUID(), appointment = UUID.randomUUID();
+				events.add(eventId); appointments.add(appointment);
+				var now = Instant.now();
+				if (index == 1) {
+					if (revokeSession) when(jwtDecoder.decode(FIRST_TOKEN)).thenThrow(
+							new org.springframework.security.oauth2.jwt.BadJwtException("Synthetic revoked patient session"));
+					else when(patientAccess.requireOwnRegistration(org.mockito.ArgumentMatchers.eq(registration), org.mockito.ArgumentMatchers.any()))
+							.thenThrow(new com.sahha.notification.exception.NotificationNotFoundException());
+				}
+				appointmentNotificationService.consume(new AppointmentEventV1(eventId, AppointmentEventType.APPOINTMENT_CONFIRMED,
+						1, now, appointment, organisation, patient, user, user, "patient-live-test", AppointmentStatus.CONFIRMED,
+						now.plusSeconds(3600), now.plusSeconds(5400), "UTC", "Synthetic room", 1L,
+						AppointmentStatus.REQUESTED, now.plusSeconds(3600)), new AppointmentEventSource("patient-live-" + eventId, 0, 0));
+				if (index == 0) {
+					var received = patientMessages.poll(5, TimeUnit.SECONDS);
+					assertNotNull(received);
+					assertEquals(appointment, received.notification().resourceId());
+					assertNull(staffMessages.poll(250, TimeUnit.MILLISECONDS));
+				} else {
+					org.awaitility.Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !firstSession.isConnected());
+					assertNull(patientMessages.poll(250, TimeUnit.MILLISECONDS));
+					assertNull(staffMessages.poll(250, TimeUnit.MILLISECONDS));
+				}
+			}
+		} finally {
+			appointments.forEach(cursorRepository::deleteById);
+			for (UUID id : events) {
+				jdbc.update("DELETE FROM patient_appointment_notification WHERE source_event_id = ?", id);
+				consumedRepository.deleteById(id);
+			}
+		}
+	}
+
+	@Test
+	void unlinkedPatientAndPatientConnectWithoutCsrfAreRejected() {
+		UUID user = UUID.randomUUID(), organisation = UUID.randomUUID(), registration = UUID.randomUUID();
+		workspace(FIRST_TOKEN, user, organisation);
+		when(patientAccess.requireOwnRegistration(org.mockito.ArgumentMatchers.eq(registration), org.mockito.ArgumentMatchers.any()))
+				.thenThrow(new com.sahha.notification.exception.NotificationNotFoundException());
+		String path = "/api/v1/notifications/patient/ws?registrationId=" + registration;
+		assertThrows(ExecutionException.class, () -> connect(FIRST_TOKEN, true, path).get(5, TimeUnit.SECONDS));
+		org.mockito.Mockito.doReturn(new com.sahha.notification.patient.PatientNotificationContext(
+				registration, UUID.randomUUID(), organisation, "ACTIVE", user)).when(patientAccess)
+				.requireOwnRegistration(org.mockito.ArgumentMatchers.eq(registration), org.mockito.ArgumentMatchers.any());
+		assertThrows(ExecutionException.class, () -> connect(FIRST_TOKEN, false, path).get(5, TimeUnit.SECONDS));
 	}
 
 	private StompSession connectAndSubscribe(
@@ -222,6 +334,10 @@ class NotificationWebSocketIntegrationTests {
 	private CompletableFuture<StompSession> connect(
 			String token,
 			boolean includeCsrfHeader) {
+		return connect(token, includeCsrfHeader, NotificationWebSocketConfiguration.ENDPOINT);
+	}
+
+	private CompletableFuture<StompSession> connect(String token, boolean includeCsrfHeader, String endpoint) {
 		WebSocketHttpHeaders handshakeHeaders = new WebSocketHttpHeaders();
 		handshakeHeaders.add(HttpHeaders.ORIGIN, "http://localhost:5173");
 		handshakeHeaders.add(
@@ -234,7 +350,7 @@ class NotificationWebSocketIntegrationTests {
 		}
 		return stompClient.connectAsync(
 				URI.create("ws://127.0.0.1:" + serverPort
-						+ NotificationWebSocketConfiguration.ENDPOINT),
+						+ endpoint),
 				handshakeHeaders,
 				connectHeaders,
 				new StompSessionHandlerAdapter() {

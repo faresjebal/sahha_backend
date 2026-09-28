@@ -1,5 +1,13 @@
 package com.sahha.file.config;
 
+import org.springframework.http.HttpMethod;
+import com.sahha.file.security.FilePermissions;
+
+import java.net.URI;
+import org.springframework.beans.factory.annotation.Value;
+import com.sahha.session.SessionAuthorityClient;
+import com.sahha.session.SessionCheckingJwtDecoder;
+
 import java.time.Clock;
 import java.util.List;
 
@@ -40,7 +48,8 @@ public class FileSecurityConfiguration {
 	}
 
 	@Bean
-	JwtDecoder fileJwtDecoder(FileSecurityProperties properties) {
+	JwtDecoder fileJwtDecoder(
+			FileSecurityProperties properties, SessionAuthorityClient sessionAuthority) {
 		NimbusJwtDecoder decoder = NimbusJwtDecoder
 				.withJwkSetUri(properties.jwkSetUri().toString())
 				.jwsAlgorithm(SignatureAlgorithm.RS256)
@@ -56,7 +65,14 @@ public class FileSecurityConfiguration {
 										"invalid_token", "The access token is invalid.", null));
 		decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
 				List.of(issuer, audience, new FileAccessTokenValidator())));
-		return decoder;
+		return new SessionCheckingJwtDecoder(decoder, sessionAuthority);
+	}
+
+	@Bean(destroyMethod = "close")
+	SessionAuthorityClient fileSessionAuthorityClient(
+			FileSecurityProperties properties,
+			@Value("${AUTH_SESSION_CHECK_URI:http://localhost:8081/api/v1/internal/auth/session-check}") URI uri) {
+		return new SessionAuthorityClient(uri, properties.accessTokenCookieName());
 	}
 
 	@Bean
@@ -95,9 +111,31 @@ public class FileSecurityConfiguration {
 								"/actuator/health", "/actuator/health/**",
 								"/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
 						.permitAll()
-						.requestMatchers("/api/v1/files", "/api/v1/files/**")
-						.hasRole("DOCTOR")
-						.anyRequest().denyAll())
+                        .requestMatchers(HttpMethod.POST, "/api/v1/files/message-attachments/*/synthetic-scan")
+                        .hasAuthority(FilePermissions.SYNTHETIC_SCAN)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/files/message-attachments/uploads")
+                        .hasAuthority(FilePermissions.UPLOAD_MESSAGE)
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/files/message-attachments/*/content")
+                        .hasAuthority(FilePermissions.UPLOAD_MESSAGE)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/files/message-attachments/*/download-grants")
+                        .hasAuthority(FilePermissions.READ_MESSAGE)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/files/message-attachments/**")
+                        .hasAuthority(FilePermissions.READ_MESSAGE)
+                        .requestMatchers("/api/v1/files/shared/**")
+                        .hasAuthority(FilePermissions.READ_SHARED)
+                        .requestMatchers("/api/v1/files/shared-care/**")
+                        .hasAuthority(FilePermissions.READ_SHARED_CARE)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/files/*/synthetic-scan")
+                        .hasAuthority(FilePermissions.SYNTHETIC_SCAN)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/files/uploads")
+                        .hasAuthority(FilePermissions.UPLOAD_OWN)
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/files/*/content")
+                        .hasAuthority(FilePermissions.UPLOAD_OWN)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/files/*/download-grants")
+                        .hasAuthority(FilePermissions.READ_OWN)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/files", "/api/v1/files/**")
+                        .hasAuthority(FilePermissions.READ_OWN)
+                        .anyRequest().denyAll())
 				.csrf(csrf -> csrf.spa().csrfTokenRepository(csrfTokenRepository))
 				.addFilterBefore(new CookieAuthenticatedCsrfFilter(
 						properties.accessTokenCookieName(), properties.csrfTokenName(),

@@ -1,4 +1,8 @@
 /* Connected workspace quality pass */
+/* Soft-shell's decorative workspace rule lowers both header and main to layer 1.
+   Keep an open notification menu above the later page without lifting closed
+   topbars above clinical/referral dialogs. */
+.soft-shell .workspace>.topbar:has(.doctor-notification-panel){z-index:20}
 :root{--quiet:#8a9894;--sidebar:244px}
 :root[data-theme="light"]{--quiet:#586761}
 select{font:inherit}button,select,input,textarea{accent-color:var(--text)}

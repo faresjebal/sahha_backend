@@ -1,6 +1,6 @@
 # Sahha internship project context
 
-Last updated: 2026-08-05
+Last updated: 2026-09-27
 
 ## 1. Purpose
 
@@ -96,9 +96,13 @@ The primary acceptance journey is:
     follow-up.
 12. The doctor securely uploads a medical document.
 13. The doctor finalises the consultation; it becomes immutable.
-14. The doctor messages another doctor and creates a referral or sharing
-    request with selected information.
-15. The receiving doctor accepts and sees only the selected information.
+14. The doctor messages another doctor and creates a same-organisation
+    second-opinion or shared-treatment referral with recorded consent and scope.
+15. For a second opinion, the receiving doctor sees only selected information
+    and the first doctor remains responsible for treatment. For an accepted
+    treatment referral, both doctors treat the patient; the recipient may read
+    the authorised finalised clinical history and documents in that organisation
+    and add their own treatment records, without overwriting finalised records.
 16. Revocation and expiry remove shared access.
 17. The receptionist and unrelated doctors remain unable to access protected
     clinical information.
@@ -125,18 +129,28 @@ The primary acceptance journey is:
 - React interfaces for organisation administrators, doctors, receptionists, and
   a limited patient portal.
 - Independent service-owned PostgreSQL databases, Flyway migrations, Eureka,
-  Gateway, Config Server, Kafka, selected Redis use, Docker Compose, automated
-  tests, and a CI/CD foundation.
+  Gateway, Config Server, Kafka, selected Redis use, native local development,
+  automated tests, and a CI/CD foundation for Azure deployment without
+  project-managed Docker containers. Azure resource selection remains a
+  deployment design decision; no cloud provisioning is authorised by this note.
 
 ## 6. Explicitly deferred scope
 
+- Central Audit event ingestion, history screens and query APIs are deferred by
+  the user's 2026-09-20 release-scope decision. Existing service-local audit
+  recording and security controls remain required.
+- Patient SMS/email/push, referral-only encounters, and reusing existing clinical
+  documents as message uploads are not part of this delivery. Shared-treatment
+  doctors record treatment through their own appointments/consultations; initial
+  message attachments are new uploads. Clinical documents retain explicit sharing.
 - Complete laboratory and radiology operations.
 - Pharmacy, dispensing, drug interaction engines, and electronic signatures.
 - Insurance, complete billing, claims, budgets, expenses, and inventory.
 - Bed management, admissions, transfers, and advanced hospital operations.
 - Nurses and other future professional workspaces.
 - Telemedicine, national integrations, advanced analytics, and AI.
-- Kubernetes/K3s production implementation until the Dockerised V1 is stable.
+- Docker packaging, Docker Compose, and Kubernetes/K3s are outside the current
+  V1 delivery requirements (user decision, 2026-09-10).
 - Real patient data.
 - Public organisation applications, regulatory-document uploads, manual
   approve/reject queues, and external verification of professional or facility
@@ -183,6 +197,23 @@ The primary acceptance journey is:
 ### Sharing
 
 - A message or patient mention grants no record access.
+- An author may explicitly anchor a conversation or selected referral to their
+  own finalised consultation after the encounter ends. Clinical verifies their
+  original current Doctor membership, organisation and patient. This authorises
+  the collaboration command, not continuing care or patient-wide recipient access;
+  the source ID is immutable and is not exposed in recipient DTOs/events.
+- V1 referrals stay within the active organisation. Second-opinion referrals
+  grant selected-information access only. Treatment referrals establish shared
+  care after acceptance and recorded consent/authorisation; the first doctor
+  keeps treating the patient and the second joins, rather than replacing them.
+- Shared-treatment access is explicit, audited, revocable and time-bounded.
+  It covers authorised finalised clinical history and documents in that
+  organisation, not unrelated organisations or another doctor's drafts.
+  Each doctor's participation is tracked separately; referral acceptance does
+  not authorise overwriting any finalised record. Communication care authority
+  and the Clinical/File history/document consumers and creation UI are implemented.
+  The native synchronous access and referral notification gates pass. The
+  combined browser/history/file and new-treatment acceptance journey remains open.
 - A grant identifies the recipient, patient, selected resource scopes, purpose,
   consent evidence, start, expiry, and status.
 - Clinical and File services verify an active grant before returning shared
@@ -277,7 +308,7 @@ server, but they use separate credentials and no cross-service table access.
 | Patient Service | Administrative patient identity, contacts, identifiers, organisation registration, duplicate candidates |
 | Scheduling Service | Availability, breaks, absences, slots, appointments, state transitions, check-in |
 | Clinical Service | Consultations, history, symptoms, vitals, diagnoses, basic prescriptions, finalisation, corrections |
-| Communication Service | Conversations, messages, referrals, consent references, share requests, grants, revocation, expiry |
+| Communication Service | Conversations, messages, typed referrals, referral-bound care participation, consent references, share requests, grants, revocation, expiry |
 | Notification Service | Notification projections, unread state, WebSocket delivery, preferences |
 | File Service | File metadata, secure upload/download negotiation, attachment links, storage access checks |
 | Audit Service | Append-only security and business audit events and authorised audit queries |
@@ -338,12 +369,16 @@ Fetch or Axios, WebSocket/STOMP, Vitest, React Testing Library, and Playwright.
 
 Java 21, Spring Boot, Spring Web, Spring Data JPA, Spring Security, Spring
 Validation, Spring Kafka, Spring WebSocket, Spring Cloud Gateway, Eureka,
-Spring Cloud Config, OpenAPI, Maven, JUnit, Mockito, and Testcontainers.
+Spring Cloud Config, OpenAPI, Maven, JUnit, Mockito, and isolated native
+infrastructure integration tests. Docker/Testcontainers are not required.
 
 ### Data and infrastructure
 
 PostgreSQL, selective JSONB, Redis for bounded technical use cases, SeaweedFS,
-Kafka, Docker Compose, Git/GitHub, GitHub Actions, and later Kubernetes/K3s.
+Kafka, Git/GitHub, GitHub Actions, and Azure without requiring Docker. Keep the
+native local workflow. Hosting, private networking, identity/secrets, storage,
+Kafka and Redis deployment choices must be verified before Azure rollout;
+substituting a managed provider must not silently change service contracts.
 
 The Maven parent declares Spring Boot `4.1.0` and Spring Cloud `2025.1.2`.
 Java 21 compilation, dependency resolution, all 12 application context tests,
@@ -351,6 +386,199 @@ executable-JAR packaging, and application startup smoke checks passed together
 on 2026-07-25.
 
 ## 13. Existing workspace baseline
+
+Current snapshot (2026-09-26): Phase 6 is active. The approved release order is
+referrals, patient in-app/WebSocket notifications, new-upload message attachments,
+then full application acceptance and critical/security fixes before cloud planning.
+Central Audit ingestion/history/queries are deferred; local audit controls remain.
+Fresh-checkout/empty-data verification remains a final gate, not a feature prerequisite.
+
+Communication now models immutable SECOND_OPINION/SHARED_TREATMENT referrals.
+Old data/omitted types stay SECOND_OPINION. Accepted shared treatment records both
+doctors' grant-bound care participation and exposes a separate, live, audited
+same-organisation/patient decision with membership, expiry and termination checks.
+Clinical now consumes that authority on every protected history/list and finalised
+record read, independently checking its own organisation/patient/finality. The
+referral drawer has an explicit read-only shared-care history preview with expiry,
+denial, lifecycle/context and late-response cleanup. Its encounter document viewer
+now uses protected File discovery/metadata and one-time downloads, with fresh
+Clinical-owned finality/patient and live Communication care checks before issuing
+tokens and returning bytes. Upload and author-write permissions are unchanged.
+File V4 binds tokens to OWN/SELECTED/SHARED_CARE routes; old short-lived LEGACY tokens
+must be reissued. The owner-boundary slice passed 214 backend tests (one optional
+native-storage test skipped), production/service builds and two intercepted
+desktop/mobile document scenarios.
+The existing composer now explicitly creates either second opinions or shared
+treatment, with distinct scope acknowledgement, renewed consent after type
+changes and frozen retry commands. All 319 frontend tests/build and eight
+desktop/mobile creation contract cases passed. The native synchronous access
+gate passed 112 Gateway assertions across Communication, Clinical and File,
+including both doctors' history/PDF access, role/org/patient isolation, immutable
+author boundaries, revocation of an outstanding token, independent grants,
+completion and expiry. All 41 retained-generation migrations and 101 isolation
+checks passed; the tools suite passed 142 tests (one optional infrastructure skip).
+All owned runtimes stopped, with zero project listeners; shared PostgreSQL remains.
+Referral lifecycle notifications are now complete: a strict routing-only consumer,
+Notification V4 transactionally deduplicated/versioned projection, private inbox
+and after-commit WebSocket delivery, with existing recipient/organisation/session
+checks. The React inbox supports six update types, duplicate handling and referral
+REST refresh on events/reconnect; opening an alert grants no record access.
+Verification on 2026-09-24 passed 147 backend tests/JAR packaging, all 339 frontend
+tests/build, 147 tooling tests (one optional infrastructure skip), all 42 retained
+migrations and 101 isolation checks. Real React/Gateway/Kafka acceptance passed
+103 assertions across six types: nine observed WebSocket alerts and one interrupted-
+run REST recovery, with private routing, read/reload recovery and viewport checks.
+A Windows Kafka retention file-lock failure was worked around with a separate
+synthetic-only retained config; no application/broker data reset was performed.
+All owned apps/helpers stopped, zero project listeners; shared PostgreSQL retained.
+Patient in-app/WebSocket appointment notifications are now verified. Separate
+patient/org inboxes use Patient's fresh own-active-registration authority, with
+session/ownership checks for live frames and no inferred staff membership.
+Verification passes 241 affected backend tests/JAR packages, 350 frontend tests/
+production build, 151 tooling tests (one optional skip), 43 retained migrations
+and 101 isolation checks. The real React/Gateway/Kafka gate passes 49 assertions:
+five retained live deliveries and one offline REST recovery, private access,
+read/reload/mark-all behavior and desktop/mobile checks. A real soft-shell dropdown
+click-interception bug was fixed with four passing Chromium layout regressions.
+All owned services/helpers stopped; zero project listeners, shared PostgreSQL retained.
+New-upload message attachments are now verified for synthetic internship V1:
+File and Communication own separate V5 metadata, immutable message references,
+fresh original-doctor participation checks, quarantine and private one-use bytes.
+The existing messenger supports up to five new PDF/PNG/JPEG uploads per text
+message, scan status, exact retries and protected downloads. Clinical documents
+still require explicit sharing; messaging grants no patient-record access.
+On 2026-09-26, 239 affected backend tests/packages pass (one optional legacy storage
+skip), 26 focused frontend tests/build and four runner contracts pass, and the
+real browser/Gateway/private-storage gate passes 29 assertions. The retained
+generation has 45 applied migrations and zero pending. All owned services/helpers
+are stopped. The user resumed full-application testing on 2026-09-27; its
+acceptance gate is now active, with no cloud provisioning authorised.
+The local scan hook is synthetic only; a production scanner and abandoned-upload
+retention must be addressed before production use.
+Scheduling's original-booking retry after rescheduling was reproduced and repaired
+on 2026-09-27: comparison now uses the immutable BOOKED audit snapshot rather than
+mutable appointment time. All 85 Scheduling tests/package pass, including staff/
+patient retries and a real HTTP reschedule regression. Live acceptance is pending.
+Each doctor's own new
+treatment appointment/consultation and the combined browser/referral/history/file
+journey still require final acceptance. No production malware-scanning claim.
+This is not completion of the full shared-treatment feature or Phase 6.
+
+Auth, Organisation, Patient,
+Scheduling, Clinical, Communication, Notification and File have real API/data
+slices; Audit now has its owned PostgreSQL/Flyway foundation but no central
+ingestion or query API. Its business HTTP surface is closed. Active frontend
+workspaces use Gateway-backed
+adapters with explicit mock opt-in. Branding, deferred-route isolation and the
+Phase 3/4/5 core workflows have recorded verification. Referral creation,
+participant lifecycle and read-only exact selected-content/file previews use
+real API adapters. The UI checks recipient/grant context, discards stale payloads
+on denial/expiry/context changes and requests protected reads/downloads only.
+Protected new-upload message attachments are verified as described above. The full
+referral/shared-care browser and new-treatment exit journey remains incomplete. Messaging's
+real two-doctor browser/Gateway/Kafka delivery and restart recovery are verified
+on 2026-09-19 (48/45 assertions); they do not complete the entire Phase 6 journey.
+Older-phase native tooling/configuration and Clinical membership-access repairs
+have recorded verification. Session/account invalidation is enforced by fresh
+Auth-owned decisions at Gateway and implemented resource services, including
+WebSocket frames; the technical `session-security` library owns no domain data.
+Frontend workspace access now uses every explicitly assigned role in the active
+organisation, plus global platform roles. The default landing role does not limit
+access to other assigned workspaces. The navigation selector changes neither
+organisation nor server authority, and administrators gain no clinical access
+without the Doctor role. Doctor appointment views select their own rows without
+narrowing administrative caches. Backend operation permissions are now separately
+defined in service-owned catalogues and derived from explicit roles in the proper
+global/organisation scope; HTTP and WebSocket gates enforce them without replacing
+live membership, ownership or sharing decisions. See `docs/BACKEND_PERMISSIONS.md`.
+Audit V1 stores bounded metadata with source-event uniqueness and database-level
+append-only enforcement. Isolated-schema, HTTP-denial and native startup checks
+pass; see `docs/AUDIT_PERSISTENCE.md`. Consistent health/readiness policies and
+154 policy integration tests are now implemented across all twelve applications.
+The full backend build passes (888 passed, one optional storage test skipped),
+including 177 new API protocol/OpenAPI/correlation tests and a new Auth
+two-organisation Doctor/Receptionist context-switch regression. All twelve
+applications package successfully. Safe framework/edge errors, explicit
+conjunctive API credentials and baseline redacted logging are verified;
+Phase 7 structured observability/privacy acceptance remains open. See
+`docs/API_CONVENTIONS.md`. Frontend verification passes 216 tests, the production
+build and 32 synthetic browser contract/layout checks, not live Kafka acceptance.
+Native probe checks now pass for all twelve applications (108 assertions), after
+the renewed pre-cloud completion request. Gateway/Audit were checked individually
+and stopped with their helpers. All project services/helpers are stopped; only
+shared PostgreSQL remains running. An isolated Windows-native database bootstrap
+now creates nine restricted databases on loopback 15432 and applies/revalidates
+their service-owned Flyway scripts. Its reset creates a fresh generation while
+retaining the old data; 34 tooling tests, 101-check access matrices and a 45-assertion
+native migration/reset/recovery gate pass. See `docs/SYNTHETIC_BOOTSTRAP.md`.
+Synthetic accounts/staff and a temporary isolated identity launcher are now
+verified through real Gateway/Auth/Organisation APIs: eight synthetic identities,
+two organisations, explicit staff invitation acceptance, doctor profiles and
+role/tenant denials. Repeat setup preserves credentials/aggregates; unsafe seed
+targets are refused. The native gate passes in 288 seconds; 201 Auth/session
+regressions and 49 tooling tests pass. Phase 2 V1 is complete. A private temporary
+Redis bootstrap passes authentication, TTL and scoped cleanup verification.
+The 2026-09-16 native Redis/Kafka/SeaweedFS bootstrap/restart/refusal gate passes
+in 148 seconds, with exact loopback listener ownership, authenticated protocol
+checks, retained cluster/object identity and failure cleanup; 53 tooling tests
+pass. All four isolated application batches now pass 243 operational assertions
+across 27 service starts, covering all twelve applications with Config consumption
+and live Gateway role checks. Kafka-enabled startup exposed missing Boot Kafka
+starters in Auth/Organisation/Patient; corrected dependencies pass full affected-
+module regression (346 tests, zero failures/errors/skips). The first/repeat Gateway
+patient workflow passes 40/32 assertions, retaining one registration, an explicit
+patient-account link, two doctor availability schedules and one appointment.
+Clinical recovery and fresh-process repeat pass 31 assertions each, including
+the completed appointment projection, immutable signed record and one attributable
+correction. Primary-file recovery/repeat passes 22/20 Gateway/storage checks;
+a fresh second-file upload/repeat passes 24/20 and the original-file preservation
+repeat passes another 20. Synthetic scan decisions
+are not malware-scanner validation. Messaging recovery/repeat passes 51 checks
+each through real Gateway/Kafka, retaining the same conversation/message/private
+notification. This exposed and fixed Notification's canonical cookie-setting
+mismatch; Notification/shared-session verification passes 114 tests and packages
+the service. All 101 tooling tests and 13 focused frontend messaging/notification
+tests pass. A 2026-09-18/19 follow-up fixes finalised-source handoff through the
+existing referral composer and an optional metadata-only conversation selector.
+The source-bound repair passes 186 backend tests; all 225 frontend tests and the
+production build pass, followed by nine passing selector-label regressions.
+Native selected-sharing acceptance passes 81 real Gateway assertions in serial
+Clinical/Communication and File/Communication batches (28/29/24): mentions give
+no access, accepted grants expose only selected data, unselected content stays
+denied, expiry and revocation work, an outstanding file token is rejected after
+revocation, and signed originals remain unchanged. The third batch rechecks the
+same revoked grant after restarting. Tooling passes 108 tests and 38 migrations
+revalidate with 101 isolation assertions. All 34 desktop/mobile browser-contract
+scenarios pass, including the source picker; their HTTP is intercepted. The later
+2026-09-19 real browser messaging gate passes 48 live and 45 fresh-process recovery
+assertions, with actual message/Kafka-notification frames, socket-only and page
+recovery, private-recipient/context denials and desktop/mobile viewport checks.
+It preserves one message/notification and uses no mocked HTTP or WebSocket frames.
+It exposed and fixed Communication's hard-coded origin, REST route shadowing and
+misnamed raw-CSRF interceptor, plus the frontend's empty reconnect callback.
+All 113 affected backend, 226 frontend and 119 tooling tests pass; executable JAR
+and frontend production builds pass. Project listeners and owned synthetic runtimes
+are stopped; shared PostgreSQL remains. A separate 2026-09-20 ordered native
+retained-data run now passes all 16 stages in 43 minutes, including 45/45 real-browser
+replays, 58 preserved identifiers, stable source/artifact fingerprints and complete
+helper cleanup. The first run exposed Windows parent-PID reuse during shutdown;
+creation-time-aware ownership fixes it without touching the unrelated older process.
+All 136 default tooling tests and the separate native failure-cleanup test pass.
+The operation lock is released and no project listeners/owned runtimes remain.
+Full referral/shared-care browser acceptance, fresh-checkout/empty-generation and
+clean-machine acceptance remain open.
+None of these results implies Azure readiness.
+Temporary helpers stop after each batch.
+The unfinished Phase 6/7/8 pre-cloud gates remain open. Azure is not provisioned
+and cloud readiness is not yet claimed. See `docs/HEALTH_READINESS.md`.
+Central Audit ingestion/query is deferred by the release-scope decision;
+service-local controls remain required. Other carry-overs remain open.
+See the living plan, `docs/SESSION_SECURITY.md` and `docs/NATIVE_DEVELOPMENT.md`.
+
+The detailed baseline below is a historical migration/early-integration snapshot,
+not the current completion report. References to unfinished Patient integration,
+Aegis branding, mocked active workspaces or absent domain services are superseded
+by the current snapshot and dated tracker evidence.
 
 ### Sahha workspace
 

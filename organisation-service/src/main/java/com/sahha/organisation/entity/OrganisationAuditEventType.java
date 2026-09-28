@@ -2,6 +2,7 @@ package com.sahha.organisation.entity;
 
 public enum OrganisationAuditEventType {
 	ORGANISATION_CREATED,
+	ORGANISATION_PROFILE_UPDATED,
 	ORGANISATION_ADMIN_ASSIGNED,
 	DEPARTMENT_CREATED,
 	DEPARTMENT_UPDATED,

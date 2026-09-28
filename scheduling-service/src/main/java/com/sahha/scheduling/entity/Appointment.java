@@ -184,11 +184,12 @@ public class Appointment {
 			UUID actorUserId,
 			UUID patientRegistrationId,
 			UUID doctorUserId,
-			Instant startsAt) {
+			Instant startsAt,
+			Instant originallyBookedStart) {
 		return bookedByUserId.equals(actorUserId)
 				&& this.patientRegistrationId.equals(patientRegistrationId)
 				&& this.doctorUserId.equals(doctorUserId)
-				&& this.startsAt.equals(startsAt);
+				&& Objects.equals(originallyBookedStart, startsAt);
 	}
 
 	public void confirm(Clock clock) {

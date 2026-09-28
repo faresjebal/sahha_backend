@@ -1,21 +1,26 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  LoaderCircle, MessageSquarePlus, Paperclip, RefreshCw, Search, Send,
+  LoaderCircle, MessageSquarePlus, RefreshCw, Search,
   ShieldCheck,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
 import { useAuth } from '../../app/auth/AuthProvider'
 import {
   WorkflowDrawer, WorkflowEmpty, WorkflowFormActions, WorkflowNotice,
   WorkflowPageHeader, formatDateTime,
 } from '../../components/workflow/WorkflowUI'
-import type { ConversationPageResource } from '../../models/communication'
+import type { ConversationPageResource, CreateConversationCommand } from '../../models/communication'
 import { apiErrorMessage } from '../../services/api/ApiError'
 import { communicationRestService } from '../../services/api/communicationRestService'
+import { consultationRestService } from '../../services/api/consultationRestService'
 import { CommunicationRealtimeClient } from '../../services/realtime/communicationRealtimeClient'
+import { Pagination } from '../workspace/LiveWorkspacePages'
+import { MessageComposer } from './MessageComposer'
+import { MessageAttachmentDownloads } from './MessageAttachmentDownloads'
 
 const optionalUuid = z.string().trim().refine(
   value => value === '' || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value),
@@ -25,6 +30,7 @@ const conversationSchema = z.object({
   recipientUserId:z.string().uuid('Choose an active doctor.'),
   subject:z.string().trim().min(4, 'Use at least 4 characters.').max(160),
   patientRegistrationId:optionalUuid,
+  sourceConsultationId:optionalUuid,
 })
 type ConversationValues = z.infer<typeof conversationSchema>
 
@@ -32,13 +38,26 @@ const listKey = (organisationId:string) => ['conversations', organisationId] as 
 
 export function DoctorMessengerPage() {
   const auth = useAuth()
+  return <DoctorMessengerWorkspace key={`${auth.session?.user.id || ''}:${auth.session?.user.organizationId || ''}`}/>
+}
+
+function DoctorMessengerWorkspace() {
+  const [searchParams] = useSearchParams()
+  const auth = useAuth()
   const queryClient = useQueryClient()
   const organisationId = auth.session?.user.organizationId || ''
   const userId = auth.session?.user.id || ''
   const [activeId, setActiveId] = useState('')
   const [query, setQuery] = useState('')
-  const [draft, setDraft] = useState('')
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(Boolean(searchParams.get('recipient')))
+  const [useFinalisedSource, setUseFinalisedSource] = useState(false)
+  const [sourcePage, setSourcePage] = useState(0)
+  const pendingCreate = useRef<{ fingerprint:string; command:CreateConversationCommand } | null>(null)
+  const sourcesQuery = useQuery({
+    queryKey:['conversation-sources', userId, organisationId, sourcePage],
+    queryFn:() => consultationRestService.listReferralSources(sourcePage),
+    enabled:Boolean(organisationId && open && useFinalisedSource), retry:false, staleTime:0, gcTime:0,
+  })
 
   const conversationsQuery = useQuery({
     queryKey:listKey(organisationId),
@@ -73,7 +92,12 @@ export function DoctorMessengerPage() {
         }
         void queryClient.invalidateQueries({ queryKey:listKey(organisationId) })
       },
-      onConnected:() => undefined,
+      onConnected:() => {
+        // A stream can reconnect after missing events while HTTP stays online.
+        // Persisted participant-scoped REST history is the recovery authority.
+        void queryClient.invalidateQueries({ queryKey:listKey(organisationId) })
+        if (current?.id) void queryClient.invalidateQueries({ queryKey:['conversation-messages', organisationId, current.id] })
+      },
       onStateChange:() => undefined,
     })
     realtime.start()
@@ -95,42 +119,43 @@ export function DoctorMessengerPage() {
   }, [current?.id, current?.unreadCount])
 
   const createMutation = useMutation({
-    mutationFn:(values:ConversationValues) => communicationRestService.create({
-      conversationRequestId:crypto.randomUUID(),
-      recipientUserId:values.recipientUserId,
-      subject:values.subject.trim(),
-      ...(values.patientRegistrationId
-        ? { patientRegistrationId:values.patientRegistrationId }
-        : {}),
-    }),
+    mutationFn:async (values:ConversationValues) => {
+      if (useFinalisedSource) {
+        if (!values.sourceConsultationId) throw new Error('Choose a finalised consultation first.')
+        const current = await consultationRestService.listReferralSources(sourcePage)
+        if (!current.content.some(source => source.consultationId === values.sourceConsultationId
+          && source.patientRegistrationId === values.patientRegistrationId)) {
+          throw new Error('The finalised source is no longer available. Choose an authorised source again.')
+        }
+      }
+      const body = { recipientUserId:values.recipientUserId, subject:values.subject.trim(),
+        ...(values.patientRegistrationId ? { patientRegistrationId:values.patientRegistrationId } : {}),
+        ...(useFinalisedSource ? { sourceConsultationId:values.sourceConsultationId } : {}),
+      }
+      const fingerprint = JSON.stringify(body)
+      if (pendingCreate.current?.fingerprint !== fingerprint) {
+        pendingCreate.current = { fingerprint, command:{ ...body, conversationRequestId:crypto.randomUUID() } }
+      }
+      return communicationRestService.create(pendingCreate.current.command)
+    },
     onSuccess:created => {
       void queryClient.invalidateQueries({ queryKey:listKey(organisationId) })
       setActiveId(created.id)
       setOpen(false)
       form.reset()
-    },
-  })
-  const sendMutation = useMutation({
-    mutationFn:(body:string) => communicationRestService.send(current!.id, {
-      messageRequestId:crypto.randomUUID(), body,
-    }),
-    onSuccess:() => {
-      setDraft('')
-      void queryClient.invalidateQueries({
-        queryKey:['conversation-messages', organisationId, current?.id],
-      })
-      void queryClient.invalidateQueries({ queryKey:listKey(organisationId) })
+      pendingCreate.current = null
+      setUseFinalisedSource(false)
     },
   })
   const form = useForm<ConversationValues>({
     resolver:zodResolver(conversationSchema),
-    defaultValues:{ recipientUserId:'', subject:'', patientRegistrationId:'' },
+    defaultValues:{ recipientUserId:searchParams.get('recipient') || '', subject:'', patientRegistrationId:'', sourceConsultationId:'' },
   })
   const eligibleDoctors = doctorsQuery.data?.content.filter(value => value.userId !== userId) || []
   const messages = [...(messagesQuery.data?.content || [])].reverse()
   const peer = current?.participants.find(value => value.userId !== userId)
   const error = conversationsQuery.error || messagesQuery.error || createMutation.error
-    || sendMutation.error || markRead.error
+    || markRead.error
 
   return <div className="page workflow-page">
     <WorkflowPageHeader
@@ -167,21 +192,19 @@ export function DoctorMessengerPage() {
         <div className="connected-message-stream">
           {messagesQuery.isPending&&<div className="communication-inline-state"><LoaderCircle className="spin"/>Loading messages…</div>}
           {messages.map(item=><article className={item.senderUserId===userId?'mine':''} key={item.id}>
-            <p>{item.body}</p><span>{item.senderDisplayName} · {formatDateTime(item.sentAt)}</span>
+            <p>{item.body}</p><MessageAttachmentDownloads attachments={item.attachments || []}/>
+            <span>{item.senderDisplayName} · {formatDateTime(item.sentAt)}</span>
           </article>)}
           {!messagesQuery.isPending&&!messages.length&&<WorkflowEmpty title="Start the conversation" copy="Send the first message in this private thread."/>}
         </div>
-        <form onSubmit={event=>{event.preventDefault();if(draft.trim()&&!sendMutation.isPending)sendMutation.mutate(draft.trim())}}>
-          <button type="button" className="icon-button" disabled title="Secure attachments are the next Phase 6 slice"><Paperclip/></button>
-          <label><span className="sr-only">Message</span><textarea rows={2} value={draft}
-            onChange={event=>setDraft(event.target.value)} maxLength={4000} placeholder={`Message ${peer?.displayName || 'doctor'}`}/></label>
-          <button className="send-button" disabled={!draft.trim()||sendMutation.isPending} aria-label="Send message">
-            {sendMutation.isPending?<LoaderCircle className="spin"/>:<Send/>}
-          </button>
-        </form>
+        <MessageComposer key={current.id} conversationId={current.id} peerName={peer?.displayName || 'doctor'}
+          onSent={conversationId=>{
+            void queryClient.invalidateQueries({queryKey:['conversation-messages',organisationId,conversationId]})
+            void queryClient.invalidateQueries({queryKey:listKey(organisationId)})
+          }}/>
       </section>:<WorkflowEmpty title="Choose a conversation" copy="Select a participant-scoped thread to read and reply."/>}
     </div>
-    <WorkflowDrawer open={open} close={()=>setOpen(false)} title="Start a clinical conversation"
+    <WorkflowDrawer open={open} close={()=>{if(!createMutation.isPending)setOpen(false)}} title="Start a clinical conversation"
       eyebrow="Authorized collaboration" copy="A patient reference is optional and does not share clinical data.">
       <form className="workflow-form" onSubmit={form.handleSubmit(values=>createMutation.mutate(values))}>
         <div className="workflow-field-grid">
@@ -190,12 +213,27 @@ export function DoctorMessengerPage() {
           </select>{form.formState.errors.recipientUserId&&<small className="login-field-error">{form.formState.errors.recipientUserId.message}</small>}</label>
           <label className="wide"><span>Conversation subject</span><input {...form.register('subject')} placeholder="Clinical question or care coordination"/>
             {form.formState.errors.subject&&<small className="login-field-error">{form.formState.errors.subject.message}</small>}</label>
-          <label className="wide"><span>Patient registration UUID <em>Optional</em></span><input {...form.register('patientRegistrationId')} placeholder="Only when you already have authorised care access"/>
+          <label className="wide"><span>Patient context</span><select aria-label="Patient context" value={useFinalisedSource?'finalised':'care'} disabled={createMutation.isPending}
+            onChange={event=>{setUseFinalisedSource(event.target.value==='finalised');setSourcePage(0);form.setValue('sourceConsultationId','');form.setValue('patientRegistrationId','')}}>
+            <option value="care">No patient, or an existing active-care reference</option>
+            <option value="finalised">Use my finalised consultation</option>
+          </select></label>
+          {useFinalisedSource&&<div className="wide">
+            <label><span>Finalised consultation</span><select aria-label="Finalised consultation" {...form.register('sourceConsultationId')} disabled={sourcesQuery.isFetching||createMutation.isPending}
+              onChange={event=>{form.setValue('sourceConsultationId',event.target.value);form.setValue('patientRegistrationId',sourcesQuery.data?.content.find(source=>source.consultationId===event.target.value)?.patientRegistrationId || '')}}>
+              <option value="">Choose your own finalised consultation</option>
+              {sourcesQuery.data?.content.map(source=><option key={source.consultationId} value={source.consultationId}>Patient {source.patientRegistrationId} · {formatDateTime(source.finalizedAt)}</option>)}
+            </select></label>
+            {sourcesQuery.isError&&<WorkflowNotice error message={apiErrorMessage(sourcesQuery.error,'Finalised sources could not be loaded.')}/>}
+            {sourcesQuery.isSuccess&&!sourcesQuery.data.content.length&&<p>No eligible finalised consultations in this organisation.</p>}
+            <Pagination page={sourcePage} pages={sourcesQuery.data?.totalPages || 0} change={page=>{if(!createMutation.isPending){setSourcePage(page);form.setValue('sourceConsultationId','');form.setValue('patientRegistrationId','')}}}/>
+          </div>}
+          <label className="wide"><span>Patient registration UUID <em>Optional</em></span><input {...form.register('patientRegistrationId')} readOnly={useFinalisedSource} placeholder="Only when you already have authorised care access"/>
             {form.formState.errors.patientRegistrationId&&<small className="login-field-error">{form.formState.errors.patientRegistrationId.message}</small>}</label>
-          <p className="workflow-boundary wide"><ShieldCheck/>Mentioning a patient validates the sender's existing care relationship. It does not share notes, files, diagnoses, or prescriptions with the recipient.</p>
+          <p className="workflow-boundary wide"><ShieldCheck/>Mentioning a patient validates active care or your selected finalised consultation and current membership. It does not share notes, files, diagnoses, or prescriptions with the recipient.</p>
         </div>
         {doctorsQuery.isError&&<WorkflowNotice error message={apiErrorMessage(doctorsQuery.error, 'Active doctors could not be loaded.')}/>}
-        <WorkflowFormActions cancel={()=>setOpen(false)} submitLabel={createMutation.isPending?'Creating…':'Create conversation'}/>
+        <WorkflowFormActions cancel={()=>{if(!createMutation.isPending)setOpen(false)}} busy={createMutation.isPending} submitLabel={createMutation.isPending?'Creating…':'Create conversation'}/>
       </form>
     </WorkflowDrawer>
   </div>

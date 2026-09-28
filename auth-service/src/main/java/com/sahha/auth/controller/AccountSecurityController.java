@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -103,6 +104,16 @@ public class AccountSecurityController {
 				.cacheControl(CacheControl.noStore())
 				.body(accountSecurityService.currentAccount(
 						UUID.fromString(jwt.getSubject())));
+	}
+
+	@PutMapping("/account/profile")
+	@Operation(operationId = "updateOwnAccountProfile", summary = "Update the caller's account profile with an explicit version")
+	@SecurityRequirement(name = "csrfHeader")
+	public ResponseEntity<CurrentAccountResponse> updateProfile(
+			@Valid @RequestBody com.sahha.auth.dto.request.UpdateAccountProfileRequest profile,
+			@AuthenticationPrincipal Jwt jwt) {
+		return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
+				accountSecurityService.updateProfile(UUID.fromString(jwt.getSubject()), profile, clock.instant()));
 	}
 
 	@DeleteMapping("/sessions/{sessionId}")

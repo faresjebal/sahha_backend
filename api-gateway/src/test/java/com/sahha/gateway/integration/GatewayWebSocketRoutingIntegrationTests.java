@@ -52,8 +52,9 @@ class GatewayWebSocketRoutingIntegrationTests {
 		NOTIFICATION_WEBSOCKET_SERVER.disposeNow();
 	}
 
-	@Test
-	void authenticatedBrowserWebSocketIsUpgradedAndProxied() {
+	@org.junit.jupiter.params.ParameterizedTest
+	@org.junit.jupiter.params.provider.ValueSource(strings = {"/api/v1/notifications/ws", "/api/v1/notifications/patient/ws?registrationId=synthetic"})
+	void authenticatedBrowserWebSocketIsUpgradedAndProxied(String endpoint) {
 		when(jwtDecoder.decode(ACCESS_TOKEN)).thenReturn(Mono.just(jwt()));
 		String outboundMessage = "synthetic-realtime-proxy-check";
 		AtomicReference<String> receivedMessage = new AtomicReference<>();
@@ -65,7 +66,7 @@ class GatewayWebSocketRoutingIntegrationTests {
 
 		new ReactorNettyWebSocketClient().execute(
 				URI.create("ws://127.0.0.1:" + gatewayPort
-						+ "/api/v1/notifications/ws"),
+						+ endpoint),
 				headers,
 				session -> session
 						.send(Mono.just(session.textMessage(outboundMessage)))
@@ -85,7 +86,8 @@ class GatewayWebSocketRoutingIntegrationTests {
 				.route(routes -> routes.ws(
 						"/api/v1/notifications/ws",
 						(inbound, outbound) -> outbound.send(
-								inbound.receive().retain())))
+								inbound.receive().retain()))
+						.ws("/api/v1/notifications/patient/ws", (inbound, outbound) -> outbound.send(inbound.receive().retain())))
 				.bindNow();
 	}
 

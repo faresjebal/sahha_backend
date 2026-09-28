@@ -23,6 +23,9 @@ import java.util.UUID;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import com.sahha.auth.service.usersessionservice.UserSessionCacheService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -49,7 +52,12 @@ import com.sahha.auth.service.useraccountservice.AccountRegistrationService;
 import com.sahha.auth.service.useraccountservice.AccountVerificationService;
 import com.sahha.auth.service.useraccountservice.PendingRegistrationResult;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+		"sahha.auth.session-cache.enabled=true",
+		"spring.data.redis.host=${AUTH_TEST_REDIS_HOST:localhost}",
+		"spring.data.redis.port=${AUTH_TEST_REDIS_PORT:6379}",
+		"spring.data.redis.password=${AUTH_TEST_REDIS_PASSWORD:}"
+})
 @AutoConfigureMockMvc
 class BrowserSessionHttpIntegrationTests {
 
@@ -85,6 +93,110 @@ class BrowserSessionHttpIntegrationTests {
 
 	@MockitoBean
 	private OrganisationContextClient organisationContextClient;
+
+	@Autowired
+	private UserSessionCacheService sessionCache;
+
+	@ParameterizedTest
+	@ValueSource(strings = {"REVOKE", "COMPROMISE", "SUSPEND", "DISABLE", "CREDENTIALS", "CONTEXT"})
+	void internalSessionCheckUsesCommittedStateEvenWhenRedisIsStillActive(String change) throws Exception {
+		VerifiedAccount account = verifiedAccount("fresh-session");
+		MvcResult login = login(account, "Synthetic session check");
+		Cookie access = responseCookie(login, "SAHHA_ACCESS_TOKEN");
+		Jwt jwt = jwtDecoder.decode(access.getValue());
+		UUID sessionId = UUID.fromString(jwt.getClaimAsString("sid"));
+		assertTrue(sessionCache.isActive(sessionId, account.userId(), 1, Instant.now()));
+		assertSessionCheck(access, 204);
+		// Deliberately omit cache publication to reproduce a lost invalidation write.
+		var session = sessionRepository.findByIdWithUser(sessionId).orElseThrow();
+		switch (change) {
+			case "REVOKE" -> session.revoke(Instant.now(), null, "SYNTHETIC_SECURITY_TEST");
+			case "COMPROMISE" -> session.markCompromised(Instant.now(), "SYNTHETIC_SECURITY_TEST");
+			case "CONTEXT" -> session.selectActiveOrganisation(UUID.randomUUID(), java.util.List.of("DOCTOR"));
+			default -> {
+				var user = session.getUser();
+				switch (change) {
+					case "SUSPEND" -> user.suspend();
+					case "DISABLE" -> user.disable();
+					case "CREDENTIALS" -> user.changePassword(user.getPasswordHash(), Instant.now());
+					default -> throw new AssertionError(change);
+				}
+				userRepository.saveAndFlush(user);
+			}
+		}
+		if (java.util.Set.of("REVOKE", "COMPROMISE", "CONTEXT").contains(change)) {
+			sessionRepository.saveAndFlush(session);
+		}
+		assertTrue(sessionCache.isActive(sessionId, account.userId(), 1, Instant.now()),
+				"The deliberately stale Redis projection must not authorize this token");
+		assertSessionCheck(access, 401);
+		mockMvc.perform(get("/api/v1/auth/session").cookie(access)).andExpect(status().isUnauthorized());
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"logout", "logout-all"})
+	void internalCheckRejectsCapturedCookiesAfterLogout(String action) throws Exception {
+		VerifiedAccount account = verifiedAccount("logout-check");
+		MvcResult first = login(account, "First synthetic browser");
+		MvcResult second = login(account, "Second synthetic browser");
+		Cookie captured = responseCookie(first, "SAHHA_ACCESS_TOKEN");
+		Cookie other = responseCookie(second, "SAHHA_ACCESS_TOKEN");
+		assertSessionCheck(captured, 204);
+		CsrfExchange csrf = responseCsrf(first);
+		mockMvc.perform(post("/api/v1/auth/" + action).cookie(captured, csrf.cookie())
+				.header("X-XSRF-TOKEN", csrf.token())).andExpect(status().isNoContent());
+		assertSessionCheck(captured, 401);
+		assertSessionCheck(other, "logout-all".equals(action) ? 401 : 204);
+	}
+
+	@Test
+	void internalCheckRejectsCapturedCookiesAfterPasswordReset() throws Exception {
+		VerifiedAccount account = verifiedAccount("reset-check");
+		Cookie captured = responseCookie(login(account, "Reset synthetic browser"), "SAHHA_ACCESS_TOKEN");
+		assertSessionCheck(captured, 204);
+		var reset = verificationService.issuePasswordReset(account.userId(), Instant.now());
+		verificationService.resetPassword(reset.getRawToken(), "Replacement synthetic passphrase 2026!", Instant.now());
+		assertSessionCheck(captured, 401);
+	}
+
+	@Test
+	void internalCheckRejectsRemovedPlatformAuthorityAndUnauthenticatedProbes() throws Exception {
+		VerifiedAccount account = verifiedAccount("platform-check");
+		var assignment = platformRoleAssignmentRepository.saveAndFlush(UserPlatformRole.assign(
+				userRepository.findById(account.userId()).orElseThrow(),
+				platformRoleRepository.findByCode(PlatformRoleCode.PLATFORM_ADMIN).orElseThrow(), null));
+		Cookie captured = responseCookie(login(account, "Platform synthetic browser"), "SAHHA_ACCESS_TOKEN");
+		assertSessionCheck(captured, 204);
+		assignment.deactivate(Instant.now());
+		platformRoleAssignmentRepository.saveAndFlush(assignment);
+		assertSessionCheck(captured, 401);
+		mockMvc.perform(get("/api/v1/internal/auth/session-check")
+				.header("X-Sahha-Session-Check", UUID.randomUUID().toString())).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void internalCheckRequiresASingleFreshnessChallengeAndReturnsNoAccountData() throws Exception {
+		Cookie access = responseCookie(login(verifiedAccount("probe-contract"), "Probe synthetic browser"), "SAHHA_ACCESS_TOKEN");
+		assertSessionCheck(access, 204);
+		mockMvc.perform(get("/api/v1/internal/auth/session-check").cookie(access))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(get("/api/v1/internal/auth/session-check").cookie(access)
+				.header("X-Sahha-Session-Check", "invalid")).andExpect(status().isBadRequest());
+		mockMvc.perform(get("/api/v1/internal/auth/session-check").cookie(access)
+				.header("X-Sahha-Session-Check", UUID.randomUUID().toString(), UUID.randomUUID().toString()))
+				.andExpect(status().isBadRequest());
+	}
+
+	private void assertSessionCheck(Cookie access, int expected) throws Exception {
+		String challenge = UUID.randomUUID().toString();
+		var result = mockMvc.perform(get("/api/v1/internal/auth/session-check").cookie(access)
+				.header("X-Sahha-Session-Check", challenge)).andExpect(status().is(expected))
+				.andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+		if (expected == 204) {
+			result.andExpect(header().string("X-Sahha-Session-Check", challenge)).andExpect(content().string(""));
+		}
+		else result.andExpect(header().doesNotExist("X-Sahha-Session-Check"));
+	}
 
 	@Test
 	void activeOrganisationSelectionRenewsOnlyAccessAndSurvivesRefresh()
@@ -165,6 +277,49 @@ class BrowserSessionHttpIntegrationTests {
 				.andExpect(jsonPath("$.organisationRoles[0]")
 						.value("ORGANIZATION_ADMIN"));
 	}
+
+    @Test
+    void multipleMembershipsSelectOnlyCurrentDoctorOrReceptionistPermissions() throws Exception {
+        VerifiedAccount account = verifiedAccount("multi-context");
+        MvcResult signedIn = login(account, "Synthetic multi-membership device");
+        Cookie currentAccess = responseCookie(signedIn, "SAHHA_ACCESS_TOKEN");
+        UUID doctorOrganisation = UUID.randomUUID();
+        UUID receptionOrganisation = UUID.randomUUID();
+        Cookie doctorAccess = null;
+        for (String role : java.util.List.of("DOCTOR", "RECEPTIONIST")) {
+            UUID organisation = role.equals("DOCTOR") ? doctorOrganisation : receptionOrganisation;
+            UUID membership = UUID.randomUUID();
+            when(organisationContextClient.resolve(organisation, currentAccess.getValue()))
+                    .thenReturn(new OrganisationContextResource(membership, organisation,
+                            "Synthetic " + role + " clinic", "CLINIC", Set.of(role), 1));
+            CsrfExchange token = csrf();
+            MvcResult selected = mockMvc.perform(post("/api/v1/auth/active-organisation")
+                            .cookie(currentAccess, token.cookie()).header("X-XSRF-TOKEN", token.token())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"organisationId\":\"" + organisation + "\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.activeOrganisationId").value(organisation.toString()))
+                    .andExpect(jsonPath("$.membershipId").value(membership.toString()))
+                    .andExpect(jsonPath("$.organisationRoles.length()").value(1))
+                    .andExpect(jsonPath("$.organisationRoles[0]").value(role)).andReturn();
+            Cookie previousAccess = currentAccess;
+            currentAccess = responseCookie(selected, "SAHHA_ACCESS_TOKEN");
+            Jwt jwt = jwtDecoder.decode(currentAccess.getValue());
+            assertEquals(organisation.toString(), jwt.getClaimAsString("org_id"));
+            assertEquals(java.util.List.of(role), jwt.getClaimAsStringList("org_roles"));
+            mockMvc.perform(get("/api/v1/auth/session").cookie(previousAccess))
+                    .andExpect(status().isUnauthorized());
+            mockMvc.perform(get("/api/v1/auth/session").cookie(currentAccess))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.activeOrganisationId").value(organisation.toString()))
+                    .andExpect(jsonPath("$.organisationRoles.length()").value(1))
+                    .andExpect(jsonPath("$.organisationRoles[0]").value(role));
+            if (role.equals("DOCTOR")) doctorAccess = currentAccess;
+        }
+        assertNotNull(doctorAccess);
+        mockMvc.perform(get("/api/v1/auth/session").cookie(doctorAccess))
+                .andExpect(status().isUnauthorized());
+    }
 
 	@Test
 	void loginRefreshAndReplayUseCookiesWithoutReturningSecrets()

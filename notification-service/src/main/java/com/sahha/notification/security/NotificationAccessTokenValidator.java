@@ -30,15 +30,17 @@ public final class NotificationAccessTokenValidator
 			}
 			UUID.fromString(token.getSubject());
 			UUID.fromString(token.getClaimAsString(SESSION_ID_CLAIM));
-			UUID.fromString(token.getClaimAsString(ACTIVE_ORGANISATION_ID_CLAIM));
 			Number credentialVersion = token.getClaim(CREDENTIAL_VERSION_CLAIM);
 			if (credentialVersion == null || credentialVersion.intValue() < 1
 					|| !validRoles(token.getClaims().get(PLATFORM_ROLES_CLAIM))
-					|| !validRoles(token.getClaims().get(ORGANISATION_ROLES_CLAIM))
-					|| ((Collection<?>) token.getClaims().get(
-							ORGANISATION_ROLES_CLAIM)).isEmpty()) {
+					|| !validRoles(token.getClaims().get(ORGANISATION_ROLES_CLAIM))) {
 				return failure();
 			}
+			String organisation = token.getClaimAsString(ACTIVE_ORGANISATION_ID_CLAIM);
+			boolean hasOrganisation = organisation != null && !organisation.isBlank();
+			boolean hasRoles = !((Collection<?>) token.getClaims().get(ORGANISATION_ROLES_CLAIM)).isEmpty();
+			if (hasOrganisation != hasRoles) return failure();
+			if (hasOrganisation) UUID.fromString(organisation);
 			return OAuth2TokenValidatorResult.success();
 		}
 		catch (RuntimeException invalidClaim) {

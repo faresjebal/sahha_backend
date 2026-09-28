@@ -1,5 +1,13 @@
 package com.sahha.patient.config;
 
+import org.springframework.http.HttpMethod;
+import com.sahha.patient.security.PatientPermissions;
+
+import java.net.URI;
+import org.springframework.beans.factory.annotation.Value;
+import com.sahha.session.SessionAuthorityClient;
+import com.sahha.session.SessionCheckingJwtDecoder;
+
 import java.time.Clock;
 import java.util.List;
 
@@ -40,7 +48,8 @@ public class PatientSecurityConfiguration {
 	}
 
 	@Bean
-	JwtDecoder patientJwtDecoder(PatientSecurityProperties properties) {
+	JwtDecoder patientJwtDecoder(
+			PatientSecurityProperties properties, SessionAuthorityClient sessionAuthority) {
 		NimbusJwtDecoder decoder = NimbusJwtDecoder
 				.withJwkSetUri(properties.jwkSetUri().toString())
 				.jwsAlgorithm(SignatureAlgorithm.RS256)
@@ -60,7 +69,14 @@ public class PatientSecurityConfiguration {
 														null));
 		decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
 				List.of(issuer, audience, new PatientAccessTokenValidator())));
-		return decoder;
+		return new SessionCheckingJwtDecoder(decoder, sessionAuthority);
+	}
+
+	@Bean(destroyMethod = "close")
+	SessionAuthorityClient patientSessionAuthorityClient(
+			PatientSecurityProperties properties,
+			@Value("${AUTH_SESSION_CHECK_URI:http://localhost:8081/api/v1/internal/auth/session-check}") URI uri) {
+		return new SessionAuthorityClient(uri, properties.accessTokenCookieName());
 	}
 
 	@Bean
@@ -106,10 +122,12 @@ public class PatientSecurityConfiguration {
 								"/swagger-ui/**")
 						.permitAll()
 						.requestMatchers("/api/v1/patients/me/**")
-						.authenticated()
-						.requestMatchers("/api/v1/patients/**", "/api/v1/patients")
-						.hasAnyRole("ORGANIZATION_ADMIN", "RECEPTIONIST")
-						.anyRequest()
+                        .hasAuthority(PatientPermissions.SELF_LINK)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/patients", "/api/v1/patients/**")
+                        .hasAuthority(PatientPermissions.ADMIN_READ)
+                        .requestMatchers("/api/v1/patients", "/api/v1/patients/**")
+                        .hasAuthority(PatientPermissions.ADMIN_WRITE)
+                        .anyRequest()
 						.denyAll())
 				.csrf(csrf -> csrf
 						.spa()

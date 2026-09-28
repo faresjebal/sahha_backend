@@ -1,5 +1,8 @@
 package com.sahha.gateway.config;
 
+import com.sahha.session.SessionAuthorityClient;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -42,6 +45,9 @@ class GatewayJwtDecoderTests {
 	private static HttpServer jwkServer;
 	private static RSAKey signingKey;
 	private static ReactiveJwtDecoder decoder;
+	private static SessionAuthorityClient authority;
+	private static final AtomicInteger sessionStatus = new AtomicInteger(204);
+	private static final AtomicInteger sessionChecks = new AtomicInteger();
 
 	@BeforeAll
 	static void startJwkServer() throws Exception {
@@ -63,7 +69,16 @@ class GatewayJwtDecoderTests {
 						output.write(body);
 					}
 				});
+		jwkServer.createContext("/session-check", exchange -> {
+			sessionChecks.incrementAndGet();
+			exchange.getResponseHeaders().set(SessionAuthorityClient.CHALLENGE_HEADER,
+					exchange.getRequestHeaders().getFirst(SessionAuthorityClient.CHALLENGE_HEADER));
+			exchange.sendResponseHeaders(sessionStatus.get(), -1);
+			exchange.close();
+		});
 		jwkServer.start();
+		authority = new SessionAuthorityClient(URI.create("http://127.0.0.1:"
+				+ jwkServer.getAddress().getPort() + "/session-check"), "SAHHA_ACCESS_TOKEN");
 		GatewaySecurityProperties properties =
 				new GatewaySecurityProperties(
 						"SAHHA_ACCESS_TOKEN",
@@ -75,11 +90,12 @@ class GatewayJwtDecoderTests {
 						AUDIENCE,
 						List.of("http://localhost:5173"));
 		decoder = new GatewaySecurityConfiguration()
-				.gatewayJwtDecoder(properties);
+				.gatewayJwtDecoder(properties, authority);
 	}
 
 	@AfterAll
 	static void stopJwkServer() {
+		if (authority != null) authority.close();
 		if (jwkServer != null) {
 			jwkServer.stop(0);
 		}
@@ -102,8 +118,22 @@ class GatewayJwtDecoderTests {
 	}
 
 	@Test
+	void rejectsPreviouslyValidSignedTokenAfterAuthorityRevokesSession() throws Exception {
+		String captured = token(signingKey, JWSAlgorithm.RS256, ISSUER, AUDIENCE, "access");
+		decoder.decode(captured).block();
+		sessionStatus.set(401);
+		try {
+			assertThrows(JwtException.class, () -> decoder.decode(captured).block());
+		}
+		finally {
+			sessionStatus.set(204);
+		}
+	}
+
+	@Test
 	void rejectsWrongSignatureAlgorithmIssuerAudienceAndTokenType()
 			throws Exception {
+		int before = sessionChecks.get();
 		RSAKey unrelatedKey = rsaKey(KEY_ID);
 
 		assertThrows(
@@ -146,6 +176,7 @@ class GatewayJwtDecoderTests {
 						ISSUER,
 						AUDIENCE,
 						"refresh")).block());
+		assertEquals(before, sessionChecks.get(), "Invalid local tokens must never reach Auth");
 	}
 
 	private static RSAKey rsaKey(String keyId) throws Exception {

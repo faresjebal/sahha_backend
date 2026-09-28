@@ -1,8 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { AccountSecurityPage, ColleagueDirectoryPage, DoctorOverviewPage, DoctorPatientsPage, OrganisationOverviewPage, PatientWorkspacePage, PlatformAccountsPage, PlatformOverviewPage, UnavailablePage, useAccountIdentity, useOrganisationContext } from './features/workspace/LiveWorkspacePages'
+import { OwnProfilePage, OrganisationSettingsPage } from './features/workspace/ProfilePages'
 import { ProtectedRoute } from './app/auth/ProtectedRoute'
 import { useAuth } from './app/auth/AuthProvider'
 import { roleHome } from './app/auth/roleRoutes'
+import { WorkspaceSwitcher } from './app/auth/WorkspaceSwitcher'
 import { ForbiddenState, SessionLoading } from './components/feedback/AsyncState'
 import { useDemoData } from './app/data/DemoDataProvider'
 import { AddDoctorDrawer, AddPatientDrawer, AppointmentDrawer } from './components/forms/ManagementDrawers'
@@ -21,6 +24,7 @@ import { DoctorProfessionalProfilePage } from './features/organisation/DoctorPro
 import { AdministrativePatientRegistryPage } from './features/patient/AdministrativePatientRegistryPage'
 import { DoctorAvailabilityPage } from './features/scheduling/DoctorAvailabilityPage'
 import { DoctorNotificationCenter } from './features/notifications/DoctorNotificationCenter'
+import { PatientNotificationCenter } from './features/notifications/PatientNotificationCenter'
 import {
   Activity, ArrowLeft, Bell, CalendarDays, Check, ChevronRight, CircleUserRound,
   Clock3, Command, FileHeart, HeartPulse, LayoutDashboard, MapPin, Menu, MessageSquare,
@@ -78,8 +82,8 @@ const todayLabel = new Intl.DateTimeFormat('en', { weekday:'long', day:'numeric'
 type Theme = 'dark' | 'light'
 type Portal = 'landing' | 'doctor' | 'organization' | 'patient' | 'admin'
 
-// Static seeds remain available for non-interactive storytelling sections. Operational
-// workspaces use DemoDataProvider so changes propagate between roles.
+// Prototype seeds remain available for retained reference components. Active V1
+// workspaces use their scoped REST adapters; no global demo provider is mounted.
 const appointments = seedAppointments
 const doctors = seedDoctors
 const patients = seedPatients
@@ -88,6 +92,7 @@ const RegisterPage = lazy(() => import('./features/auth/LoginPage').then(module 
 const VerifyEmailPage = lazy(() => import('./features/auth/LoginPage').then(module => ({ default:module.VerifyEmailPage })))
 const DoctorClinicalWorkspacePage = lazy(() => import('./features/clinical/DoctorClinicalWorkspacePage').then(module => ({ default:module.DoctorClinicalWorkspacePage })))
 const DoctorMessengerPage = lazy(() => import('./features/communication/DoctorMessengerPage').then(module => ({ default:module.DoctorMessengerPage })))
+const ReferralWorkspacePage = lazy(() => import('./features/communication/ReferralWorkspacePage').then(module => ({ default:module.ReferralWorkspacePage })))
 
 function useDialogA11y(open:boolean,onClose:()=>void){
   const ref=useRef<HTMLElement>(null)
@@ -121,62 +126,53 @@ function ThemeButton({ theme, toggle }: { theme: Theme; toggle: () => void }) {
 
 function AppShell({ onExit, theme, toggleTheme }: { onExit: () => void; theme: Theme; toggleTheme: () => void }) {
   const auth = useAuth()
-  const { patients } = useDemoData()
-  const location=useLocation(); const routerNavigate=useNavigate()
-  const routeView=location.pathname.split('/')[2] as View|undefined
-  const [view, setView] = useState<View>(doctorViews.includes(routeView as View)?routeView!:'overview')
-  const patientId=location.pathname.split('/')[3]
-  const [patient, setPatient] = useState<Patient | null>(()=>patientId?patients.find(item=>item.id===patientId)||null:null)
+  const account = useAccountIdentity()
+  const contexts = useOrganisationContext()
+  const context = contexts.data?.find(item => item.organisationId === auth.session?.user.organizationId)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const view = location.pathname.split('/')[2] || 'overview'
+  const resourceId = location.pathname.split('/')[3]
   const [mobileNav, setMobileNav] = useState(false)
-  const [appointmentOpen, setAppointmentOpen] = useState(false)
-  const [appointmentDoctor, setAppointmentDoctor] = useState(1)
-  const [patientOpen, setPatientOpen] = useState(false)
-  const hospitalDoctor = auth.session?.user.doctorType === 'HOSPITAL'
-  const doctorNav = hospitalDoctor ? hospitalDoctorNav : privateDoctorNav
-
-  useEffect(()=>{const next=location.pathname.split('/')[2] as View;const allowed=next==='encounters'||doctorNav.some(item=>item.id===next);setView(allowed?next:'overview');const id=location.pathname.split('/')[3];setPatient(id?patients.find(item=>item.id===id)||null:null)},[doctorNav,location.pathname,patients])
-  const navigate = (next: View) => { routerNavigate(`/doctor/${next}`); setMobileNav(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }
-
+  const doctorNav = coreDoctorNav.filter(item => item.id !== 'results')
+  const name = account.data ? `${account.data.firstName} ${account.data.lastName}` : 'Signed-in doctor'
+  const go = (next: string) => { navigate(`/doctor/${next}`); setMobileNav(false) }
+  useEffect(() => {
+    const find = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault(); navigate('/doctor/patients')
+      }
+    }
+    window.addEventListener('keydown', find)
+    return () => window.removeEventListener('keydown', find)
+  }, [navigate])
+  let page: React.ReactNode
+  switch (view) {
+    case 'overview': page = <DoctorOverviewPage/>; break
+    case 'doctors': page = <ColleagueDirectoryPage/>; break
+    case 'patients': page = <DoctorPatientsPage registrationId={resourceId}/>; break
+    case 'appointments': page = <AppointmentLifecyclePage scope="doctor"/>; break
+    case 'encounters': page = <Navigate to="/doctor/clinical" replace/>; break
+    case 'clinical': page = <Suspense fallback={<SessionLoading/>}><DoctorClinicalWorkspacePage consultationId={resourceId}/></Suspense>; break
+    case 'messages': page = <Suspense fallback={<SessionLoading/>}><DoctorMessengerPage/></Suspense>; break
+    case 'availability': page = <DoctorAvailabilityPage/>; break
+    case 'profile': page = <DoctorProfessionalProfilePage/>; break
+    case 'orders': case 'referrals': page = <Suspense fallback={<SessionLoading/>}><ReferralWorkspacePage/></Suspense>; break
+    default: page = <UnavailablePage/>
+  }
   return <div className="app-shell workspace-v3 doctor-workspace">
     <a className="skip-link" href="#main">Skip to content</a>
     <aside className={`sidebar ${mobileNav ? 'sidebar--open' : ''}`}>
-      <div className="brand"><span className="brand__mark"><HeartPulse size={20} /></span><span>SAHHA<small>medical network</small></span></div>
-      <button className="icon-button close-nav" aria-label="Close navigation" onClick={() => setMobileNav(false)}><X /></button>
-      <nav aria-label="Primary navigation">
-        <p className="eyebrow">Workspace</p>
-        {doctorNav.map(item => <button key={item.id} aria-current={view === item.id ? 'page' : undefined} className={view === item.id ? 'active' : ''} onClick={() => navigate(item.id)}><item.icon size={19} /><span>{item.label}</span>{item.id === 'messages' && <DoctorConversationUnreadBadge/>}</button>)}
+      <div className="brand"><span className="brand__mark"><HeartPulse size={20}/></span><span>SAHHA<small>medical network</small></span></div>
+      <button className="icon-button close-nav" aria-label="Close navigation" onClick={() => setMobileNav(false)}><X/></button>
+      <nav aria-label="Primary navigation"><p className="eyebrow">Workspace</p>
+        {doctorNav.map(item => <button key={item.id} aria-current={view === item.id ? 'page' : undefined} className={view === item.id ? 'active' : ''} onClick={() => go(item.id)}><item.icon size={19}/><span>{item.id === 'orders' ? 'Referrals' : item.label}</span>{item.id === 'messages' && <DoctorConversationUnreadBadge/>}</button>)}
       </nav>
-      <div className="sidebar__bottom">
-        <div className="care-signal"><span><Activity size={16} /> System pulse</span><strong>All services stable</strong><i><em /></i></div>
-        <button className="profile"><Avatar initials={auth.session?.user.displayName.split(' ').map(value=>value[0]).slice(0,2).join('')||'MV'} small /><span><strong>{auth.session?.user.displayName||'Dr. Mara Voss'}</strong><small>{hospitalDoctor?'Hospital cardiology':'Private cardiology'}</small></span><MoreHorizontal size={18} /></button>
-      </div>
+      <WorkspaceSwitcher onNavigate={() => setMobileNav(false)}/>
+      <div className="sidebar__bottom"><button className="profile" onClick={() => go('profile')}><Avatar initials={name.split(' ').map(part=>part[0]).slice(0,2).join('')} small/><span><strong>{name}</strong><small>{context?.organisationName || 'Select organisation'}</small></span><ChevronRight size={18}/></button><button className="portal-exit" onClick={() => navigate('/organisations/select')}>Change organisation</button></div>
     </aside>
-    {mobileNav && <button className="nav-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
-    <div className="workspace">
-      <header className="topbar">
-        <button className="icon-button menu-button" aria-label="Open navigation" onClick={() => setMobileNav(true)}><Menu /></button>
-        <div className="topbar__context"><span>Clinician console</span><i />{todayLabel}</div>
-        <div className="topbar__actions"><button className="command"><Command size={15} /><span>Quick find</span><kbd>⌘ K</kbd></button><ThemeButton theme={theme} toggle={toggleTheme} /><DoctorNotificationCenter/><button className="icon-button" aria-label="Leave doctor portal" onClick={onExit}><LogOut /></button></div>
-      </header>
-      <main id="main">
-        {view === 'overview' && <Overview onNavigate={navigate} onOpenPatient={(p) => routerNavigate(`/doctor/patients/${p.id}`)} />}
-        {view === 'doctors' && <DoctorDirectory onBook={(doctor) => {setAppointmentDoctor(doctor.id);setAppointmentOpen(true)}} />}
-        {view === 'patients' && (patient ? <PatientRecord patient={patient} onBack={() => routerNavigate('/doctor/patients')} onEncounter={()=>routerNavigate(`/doctor/encounters/${patient.id}`)} /> : <PatientList onOpen={p=>routerNavigate(`/doctor/patients/${p.id}`)} onAdd={()=>setPatientOpen(true)} />)}
-        {view === 'appointments' && <AppointmentLifecyclePage scope="doctor" />}
-        {view === 'messages' && <Suspense fallback={<SessionLoading/>}><DoctorMessengerPage /></Suspense>}
-        {view === 'clinical' && <Suspense fallback={<SessionLoading/>}><DoctorClinicalWorkspacePage consultationId={location.pathname.split('/')[3]} /></Suspense>}
-        {view === 'team' && hospitalDoctor && <DoctorTeamPage />}
-        {view === 'handover' && hospitalDoctor && <ConnectedHandoverPage />}
-        {view === 'results' && <DoctorResults/>}
-        {view === 'orders' && <DoctorOrdersConnected/>}
-        {view === 'availability' && <DoctorAvailabilityPage/>}
-        {view === 'practice' && <DoctorPractice/>}
-        {view === 'profile' && <DoctorProfessionalProfilePage/>}
-        {view === 'encounters' && patient && <DoctorEncounterConnected patient={patient} complete={()=>routerNavigate(`/doctor/patients/${patient.id}`)} navigate={navigate}/>} 
-      </main>
-    </div>
-    <AddPatientDrawer open={patientOpen} onClose={()=>setPatientOpen(false)} actor="Independent practice"/>
-    <AppointmentDrawer open={appointmentOpen} onClose={()=>setAppointmentOpen(false)} defaultDoctorId={appointmentDoctor}/>
+    {mobileNav && <button className="nav-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)}/>}
+    <div className="workspace"><header className="topbar"><button className="icon-button menu-button" aria-label="Open navigation" onClick={() => setMobileNav(true)}><Menu/></button><div className="topbar__context"><span>Clinician console</span><i/>{todayLabel}</div><div className="topbar__actions"><button className="command" onClick={() => go('patients')}><Command size={15}/><span>Quick find</span><kbd>Ctrl / ⌘ K</kbd></button><ThemeButton theme={theme} toggle={toggleTheme}/><DoctorNotificationCenter/><button className="icon-button" aria-label="Sign out" onClick={onExit}><LogOut/></button></div></header><main id="main">{page}</main></div>
   </div>
 }
 
@@ -393,21 +389,40 @@ const organizationClinicians = [
 ]
 
 function PortalShell({ role, active, setActive, items, children, onExit, theme, toggleTheme, topbarExtra, profileOverride }: { role: 'Patient' | 'Administrator' | 'Organisation' | 'Receptionist'; active: string; setActive: (v: never) => void; items: { id: string; label: string; icon: typeof Activity; badge?: number }[]; children: React.ReactNode; onExit: () => void; theme: Theme; toggleTheme: () => void; topbarExtra?: React.ReactNode; profileOverride?: [string,string,string] }) {
+  const account = useAccountIdentity()
+  const contexts = useOrganisationContext()
+  const { session } = useAuth()
+  const navigate = useNavigate()
+  const selectedContext = contexts.data?.find(item => item.organisationId === session?.user.organizationId)
   const [open, setOpen] = useState(false)
   const patientRole = role === 'Patient'
   const organizationRole = role === 'Organisation' || role === 'Receptionist'
-  const profile = profileOverride || (patientRole ? ['NB','Nora Bennett','Patient'] : organizationRole ? ['SH','St. Helena Medical','Operations center'] : ['AK','Avery Kim','Administrator'])
-  return <div className={`app-shell soft-shell ${organizationRole ? 'organization-shell' : ''}`}><a className="skip-link" href="#portal-main">Skip to content</a><aside className={`sidebar ${open ? 'sidebar--open' : ''}`}><div className="brand"><span className="brand__mark"><HeartPulse size={20}/></span><span>SAHHA<small>{role} portal</small></span></div><button className="icon-button close-nav" onClick={() => setOpen(false)} aria-label="Close navigation"><X /></button><nav aria-label={`${role} navigation`}><p className="eyebrow">Your space</p>{items.map(item => <button key={item.id} aria-current={active === item.id ? 'page' : undefined} className={active === item.id ? 'active' : ''} onClick={() => { setActive(item.id as never); setOpen(false) }}><item.icon/><span>{item.label}</span>{item.badge ? <b aria-label={`${item.badge} items`}>{item.badge}</b> : null}</button>)}</nav><div className="sidebar__bottom"><button className="profile"><Avatar initials={profile[0]} small/><span><strong>{profile[1]}</strong><small>{profile[2]}</small></span><MoreHorizontal/></button><button className="portal-exit" onClick={onExit}><LogOut/>Leave demo portal</button></div></aside><div className="workspace"><header className="topbar"><button className="icon-button menu-button" aria-expanded={open} onClick={() => setOpen(true)} aria-label="Open navigation"><Menu/></button><div className="topbar__context"><span>{role} portal</span><i/>{todayLabel}</div><div className="topbar__actions">{topbarExtra}<ThemeButton theme={theme} toggle={toggleTheme}/><button className="icon-button has-dot" aria-label="Notifications"><Bell/></button></div></header><main id="portal-main">{children}</main></div>{open && <button className="nav-scrim" aria-label="Close navigation" onClick={() => setOpen(false)} />}</div>
+  const name = account.data ? `${account.data.firstName} ${account.data.lastName}` : 'Signed-in account'
+  const profile = [name.split(' ').map(part=>part[0]).slice(0,2).join(''), name, selectedContext?.organisationName || role]
+  return <div className={`app-shell soft-shell ${organizationRole ? 'organization-shell' : ''}`}><a className="skip-link" href="#portal-main">Skip to content</a><aside className={`sidebar ${open ? 'sidebar--open' : ''}`}><div className="brand"><span className="brand__mark"><HeartPulse size={20}/></span><span>SAHHA<small>{role} portal</small></span></div><button className="icon-button close-nav" onClick={() => setOpen(false)} aria-label="Close navigation"><X /></button><nav aria-label={`${role} navigation`}><p className="eyebrow">Your space</p>{items.map(item => <button key={item.id} aria-current={active === item.id ? 'page' : undefined} className={active === item.id ? 'active' : ''} onClick={() => { setActive(item.id as never); setOpen(false) }}><item.icon/><span>{item.label}</span>{item.badge ? <b aria-label={`${item.badge} items`}>{item.badge}</b> : null}</button>)}</nav><WorkspaceSwitcher onNavigate={() => setOpen(false)}/><div className="sidebar__bottom"><button className="profile" onClick={() => navigate(patientRole ? '/patient/profile' : organizationRole ? (role === 'Receptionist' ? '/reception/security' : '/hospital/admin/security') : '/platform/settings')}><Avatar initials={profile[0]} small/><span><strong>{profile[1]}</strong><small>{profile[2]}</small></span><MoreHorizontal/></button><button className="portal-exit" onClick={onExit}><LogOut/>Sign out</button></div></aside><div className="workspace"><header className="topbar"><button className="icon-button menu-button" aria-expanded={open} onClick={() => setOpen(true)} aria-label="Open navigation"><Menu/></button><div className="topbar__context"><span>{role} portal</span><i/>{todayLabel}</div><div className="topbar__actions">{topbarExtra}{patientRole && <PatientNotificationCenter/>}{organizationRole && <DoctorNotificationCenter navigationTargets={role === 'Receptionist' ? { appointment:'/reception/appointments' } : {}}/>}<ThemeButton theme={theme} toggle={toggleTheme}/></div></header><main id="portal-main">{children}</main></div>{open && <button className="nav-scrim" aria-label="Close navigation" onClick={() => setOpen(false)} />}</div>
 }
 
 function PatientPortal({ onExit, theme, toggleTheme }: { onExit: () => void; theme: Theme; toggleTheme: () => void }) {
-  const { patients, doctors } = useDemoData()
-  const location=useLocation();const routerNavigate=useNavigate();const segment=location.pathname.split('/')[2];const routeMap:Record<string,PatientView>={overview:'home',doctors:'care',history:'history',appointments:'visits',results:'results',medications:'medications',messages:'messages',billing:'billing',reviews:'reviews',profile:'profile'};const reverseMap:Record<PatientView,string>={home:'overview',care:'doctors',history:'history',visits:'appointments',results:'results',medications:'medications',messages:'messages',billing:'billing',reviews:'reviews',profile:'profile'}
-  const [view, setView] = useState<PatientView>(routeMap[segment]||'home'); const doctorId=Number(location.pathname.split('/')[3]); const [doctor, setDoctor] = useState<Doctor|null>(()=>doctors.find(item=>item.id===doctorId)||null); const me = patients[0]
-  const items = [{id:'home',label:'My overview',icon:LayoutDashboard},{id:'care',label:'Find care',icon:Stethoscope},{id:'visits',label:'Appointments',icon:CalendarDays},{id:'results',label:'Results & documents',icon:FlaskConical,badge:1},{id:'medications',label:'Medications',icon:Pill},{id:'messages',label:'Care messages',icon:MessageSquare,badge:2},{id:'history',label:'Health history',icon:FileHeart},{id:'billing',label:'Billing & payments',icon:CreditCard},{id:'reviews',label:'My reviews',icon:Star},{id:'profile',label:'Profile & insurance',icon:IdCard}]
-  useEffect(()=>{setView(routeMap[location.pathname.split('/')[2]]||'home');const id=Number(location.pathname.split('/')[3]);setDoctor(doctors.find(item=>item.id===id)||null)},[doctors,location.pathname])
-  const navigateView=(next:PatientView)=>routerNavigate(`/patient/${reverseMap[next]}`)
-  return <PortalShell role="Patient" active={view} setActive={navigateView as never} items={items} onExit={onExit} theme={theme} toggleTheme={toggleTheme}>{view === 'home' && <PatientHomeConnected navigate={navigateView}/>} {view === 'care' && (doctor ? <DoctorProfile doctor={doctor} back={()=>routerNavigate('/patient/doctors')} onBook={()=>routerNavigate('/patient/appointments')}/> : <PatientDoctorsConnected open={selected=>routerNavigate(`/patient/doctors/${selected.id}`)}/>)} {view === 'history' && <PatientHistory patient={me}/>} {view === 'visits' && <><PatientAppointmentsPage/><PatientAppointmentGuide/></>}{view==='results'&&<PatientResults/>}{view==='medications'&&<PatientMedications/>}{view==='messages'&&<ConnectedMessengerPage audience="patient"/>}{view==='billing'&&<PatientBillingPage/>}{view==='reviews'&&<PatientReviewsPage/>}{view==='profile'&&<PatientProfile/>}</PortalShell>
+  const location = useLocation()
+  const navigate = useNavigate()
+  const view = location.pathname.split('/')[2] || 'overview'
+  const items = [
+    {id:'overview',label:'My overview',icon:LayoutDashboard},
+    {id:'doctors',label:'Find care',icon:Stethoscope},
+    {id:'appointments',label:'Appointments',icon:CalendarDays},
+    {id:'profile',label:'My profile',icon:IdCard},
+    {id:'security',label:'Account security',icon:ShieldCheck},
+  ]
+  let page: React.ReactNode
+  switch (view) {
+    case 'overview': page = <PatientWorkspacePage mode="overview"/>; break
+    case 'doctors': page = <PatientWorkspacePage mode="doctors"/>; break
+    case 'appointments': page = <PatientAppointmentsPage/>; break
+    case 'profile': page = <OwnProfilePage/>; break
+    case 'security': page = <AccountSecurityPage/>; break
+    default: page = <UnavailablePage/>
+  }
+  return <PortalShell role="Patient" active={view} setActive={next => navigate(`/patient/${next}`)} items={items} onExit={onExit} theme={theme} toggleTheme={toggleTheme}>{page}</PortalShell>
 }
 
 function BookingDialog({doctor,close,complete}:{doctor:Doctor|null;close:()=>void;complete:()=>void}){
@@ -437,30 +452,26 @@ function PatientHistory({patient}:{patient:Patient}) { return <div className="pa
 
 function PatientVisits(){ return <div className="page"><PageIntro eyebrow="Your schedule" title="Appointments that stay simple." copy="Upcoming visits, preparation details, and a clear record of past consultations." action={<button className="primary soft"><Plus/>Book appointment</button>}/><div className="patient-visits"><section><p className="eyebrow">Upcoming</p><article className="featured-visit"><div className="visit-date"><strong>14</strong><span>JUL<small>10:30 AM</small></span></div><div><span>Video consultation</span><h2>Blood pressure follow-up</h2><p>Dr. Mara Voss · Cardiology · 30 minutes</p></div><button className="primary soft"><Video/>Join call</button></article></section><section><p className="eyebrow">Past appointments</p>{appointments.slice(0,3).map(a=><article className="past-visit" key={a.time}><Check/><div><h3>{a.reason}</h3><p>Dr. Mara Voss · {a.mode}</p></div><span>Completed</span><button className="secondary soft">View summary</button></article>)}</section></div></div> }
 
-function AdminPortal({onExit,theme,toggleTheme}:{onExit:()=>void;theme:Theme;toggleTheme:()=>void}) {
-  const location=useLocation();const routerNavigate=useNavigate()
-  const routeMap:Record<string,AdminView>={overview:'overview',users:'people',organizations:'organizations',verification:'verification',appointments:'appointments',reviews:'reviews',integrations:'integrations',support:'support',incidents:'incidents',flags:'flags',audit:'audit',settings:'settings'}
-  const reverseMap:Record<AdminView,string>={overview:'overview',people:'users',organizations:'organizations',verification:'verification',appointments:'appointments',reviews:'reviews',integrations:'integrations',support:'support',incidents:'incidents',flags:'flags',audit:'audit',settings:'settings'}
-  const [view,setView]=useState<AdminView>(routeMap[location.pathname.split('/')[2]]||'overview')
-  useEffect(()=>setView(routeMap[location.pathname.split('/')[2]]||'overview'),[location.pathname])
-  const navigateView=(next:AdminView)=>routerNavigate(`/platform/${reverseMap[next]}`)
-  const items=[
+function AdminPortal({ onExit, theme, toggleTheme }: { onExit: () => void; theme: Theme; toggleTheme: () => void }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const view = location.pathname.split('/')[2] || 'overview'
+  const items = [
     {id:'overview',label:'Platform overview',icon:LayoutDashboard},
-    {id:'people',label:'People',icon:Users},
+    {id:'users',label:'Accounts',icon:Users},
     {id:'organizations',label:'Organisations',icon:Building2},
-    {id:'verification',label:'Doctor verification',icon:UserCheck,badge:3},
-    {id:'appointments',label:'Appointment flow',icon:CalendarDays},
-    {id:'reviews',label:'Review moderation',icon:Star,badge:1},
-    {id:'integrations',label:'Integrations',icon:Settings},
-    {id:'support',label:'Support & safety',icon:MessageSquare,badge:4},
-    {id:'incidents',label:'Platform incidents',icon:Siren},
-    {id:'flags',label:'Feature controls',icon:SlidersHorizontal},
-    {id:'audit',label:'Global audit',icon:ScrollText},
-    {id:'settings',label:'Platform settings',icon:ShieldCheck},
+    {id:'settings',label:'Account security',icon:ShieldCheck},
   ]
-  return <PortalShell role="Administrator" active={view} setActive={navigateView as never} items={items} onExit={onExit} theme={theme} toggleTheme={toggleTheme}>
-    {view==='overview'&&<AdminOverview navigate={navigateView}/>} {view==='people'&&<PeopleAdminConnected/>} {view==='organizations'&&<PlatformOrganizationsPage/>} {view==='verification'&&<Verification/>} {view==='appointments'&&<AppointmentAdminConnected/>} {view==='reviews'&&<ReviewModerationPage/>} {view==='integrations'&&<PlatformIntegrations/>} {view==='support'&&<PlatformSupport/>} {view==='incidents'&&<PlatformIncidents/>} {view==='flags'&&<FeatureControls/>} {view==='audit'&&<PlatformAudit/>} {view==='settings'&&<AdminSettings/>}
-  </PortalShell>
+  let page: React.ReactNode
+  switch (view) {
+    case 'overview': page = <PlatformOverviewPage/>; break
+    case 'users': page = <PlatformAccountsPage/>; break
+    case 'organizations': page = <PlatformOrganizationsPage/>; break
+    case 'settings': page = <AccountSecurityPage/>; break
+    case 'audit': page = <UnavailablePage title="Audit history is not available yet" copy="Authorised central audit queries are planned in Phase 7. Browser-local events are not an audit trail."/>; break
+    default: page = <UnavailablePage/>
+  }
+  return <PortalShell role="Administrator" active={view} setActive={next => navigate(`/platform/${next}`)} items={items} onExit={onExit} theme={theme} toggleTheme={toggleTheme}>{page}</PortalShell>
 }
 
 function AdminOverview({navigate}:{navigate:(v:AdminView)=>void}) { return <div className="page"><PageIntro eyebrow="Platform operations · Live" title="Everything is moving well." copy="A focused view of care access, trust, and operational health."/><div className="admin-metrics"><article><span>Active people <TrendingUp/></span><strong>2,418</strong><small>+8.4% this month</small></article><article><span>Verified doctors <UserCheck/></span><strong>48</strong><small>3 awaiting review</small></article><article><span>Appointments today <CalendarDays/></span><strong>186</strong><small>94% confirmed</small></article><article><span>Platform health <Activity/></span><strong>99.98%</strong><small>All systems operational</small></article></div><div className="admin-grid"><section className="operations-chart"><div className="panel-heading"><div><p className="eyebrow">30-day care activity</p><h2>Appointments completed</h2></div><span className="chart-legend"><i/>Completed <i/>Cancelled</span></div><div className="chart-bars">{[48,60,52,72,66,84,78,91,73,88,94,82].map((n,i)=><div key={i}><span style={{height:`${n}%`}}/><i style={{height:`${Math.max(8,30-n/4)}%`}}/></div>)}</div><div className="chart-labels"><span>16 Jun</span><span>23 Jun</span><span>30 Jun</span><span>07 Jul</span></div></section><section className="admin-attention"><p className="eyebrow">Needs attention</p><button onClick={()=>navigate('verification')}><UserCheck/><span><strong>3 doctor applications</strong><small>Oldest waiting 18 hours</small></span><ChevronRight/></button><button onClick={()=>navigate('reviews')}><ShieldAlert/><span><strong>1 flagged review</strong><small>Reported for medical claims</small></span><ChevronRight/></button><button onClick={()=>navigate('appointments')}><CalendarDays/><span><strong>7 unmatched requests</strong><small>Specialist availability needed</small></span><ChevronRight/></button></section></div><section className="audit-feed"><div className="panel-heading"><div><p className="eyebrow">Trust & safety</p><h2>Recent platform activity</h2></div></div>{['Dr. Sanaa Idris completed identity verification','Admin Avery Kim updated appointment cancellation policy','Patient data export requested by Nora Bennett','New clinical organization invited 6 care team members'].map((x,i)=><div key={x}><span className="audit-icon">{i===0?<UserCheck/>:i===1?<Settings/>:i===2?<FileHeart/>:<Users/>}</span><p>{x}<small>{i+1} hour{i?'s':''} ago · Audit ID AE-{4821+i}</small></p><Status value={i===0?'Complete':'Logged'}/></div>)}</section></div> }
@@ -578,25 +589,44 @@ function PatientMessages(){const [active,setActive]=useState(0);const [draft,set
 
 function PatientProfile(){const [editing,setEditing]=useState(false);const [saved,setSaved]=useState(false);return <div className="page patient-detail-page"><PageIntro eyebrow="Identity, insurance, and privacy" title="Your account and access." copy="Keep registration information current, understand who can see your record, and manage the people allowed to help with your care." action={<button className="secondary soft" onClick={()=>setEditing(value=>!value)}>{editing?'Cancel editing':'Edit profile'}</button>}/>{saved&&<div className="inline-success" role="status"><Check/>Profile changes saved to the demo account.</div>}<div className="profile-settings-grid"><section><header><IdCard/><div><h2>Personal information</h2><p>Used for registration and identity matching.</p></div></header><div className="profile-fields">{[['Full name','Nora Bennett'],['Date of birth','14 February 1984'],['Phone','+1 312 847 1928'],['Email','nora.b@example.com'],['Address','218 Willow Street, Chicago']].map(([label,value])=><label key={label}><span>{label}</span><input disabled={!editing} defaultValue={value}/></label>)}</div>{editing&&<button className="primary soft" onClick={()=>{setEditing(false);setSaved(true)}}>Save changes</button>}</section><section><header><CreditCard/><div><h2>Insurance</h2><p>Eligibility should be confirmed before each visit.</p></div></header><div className="insurance-card"><span>Northstar Health Plan</span><strong>NSH-8429-1186</strong><small>Preferred Care · Active through 31 December 2026</small><Status value="Verified"/></div><button className="secondary soft">Update insurance</button></section><section><header><Users/><div><h2>Caregiver access</h2><p>People authorized to help manage your care.</p></div></header><div className="proxy-person"><Avatar initials="JB" small/><span><strong>Jordan Bennett</strong><small>Can view appointments and visit summaries · Expires 31 Dec 2026</small></span><Status value="Active"/></div><button className="secondary soft"><UserPlus/>Add caregiver</button></section><section><header><ShieldCheck/><div><h2>Privacy and data</h2><p>Review consent, access history, and export requests.</p></div></header>{[['Care-team access','3 active clinicians'],['Consent preferences','Updated 18 April 2026'],['Record access history','6 accesses this month'],['Data export','No active request']].map(([label,value])=><button className="privacy-row" key={label}><span><strong>{label}</strong><small>{value}</small></span><ChevronRight/></button>)}</section></div></div>}
 
-function OrganizationPortal({onExit,theme,toggleTheme}:{onExit:()=>void;theme:Theme;toggleTheme:()=>void}) {
-  const auth=useAuth();const location=useLocation();const routerNavigate=useNavigate()
-  const identity:HospitalIdentity=auth.session?.user.role==='hospital-super-admin'?'super-admin':auth.session?.user.role==='receptionist'?'receptionist':'operations'
-  const routeMap:Record<string,OrganizationView>={overview:'command',departments:'departments',clinicians:'clinicians',flow:'flow',capacity:'capacity',staffing:'staffing',admissions:'admissions',discharges:'discharges',incidents:'incidents',handover:'handover',finance:'finance',claims:'claims',budgets:'budgets',statistics:'statistics',access:'access',security:'security',logs:'logs',settings:'settings',patients:'reception',registration:'registration',appointments:'receptionAppointments',checkin:'checkin'}
-  const [view,setView]=useState<OrganizationView>(routeMap[location.pathname.split('/').at(-1)||'']||(identity==='receptionist'?'reception':'command'))
-  const operationalItems=[{id:'command',label:'Command center',icon:Gauge},{id:'flow',label:'Patient flow',icon:Siren,badge:4},{id:'admissions',label:'Admissions',icon:DoorOpen,badge:3},{id:'discharges',label:'Discharges',icon:ArrowUpRight,badge:5},{id:'capacity',label:'Beds & capacity',icon:BedDouble},{id:'departments',label:'Departments',icon:Hospital},{id:'clinicians',label:'Clinical teams',icon:BriefcaseMedical},{id:'staffing',label:'Staffing',icon:UserCog,badge:2},{id:'incidents',label:'Incidents',icon:ShieldAlert,badge:2},{id:'handover',label:'Shift handover',icon:ClipboardCheck}]
-  const superAdminItems=[...operationalItems,{id:'finance',label:'Financial center',icon:BadgeDollarSign},{id:'claims',label:'Claims & receivables',icon:Receipt,badge:7},{id:'budgets',label:'Budgets',icon:CircleDollarSign},{id:'statistics',label:'Hospital statistics',icon:BarChart3},{id:'access',label:'Users & access',icon:LockKeyhole,badge:3},{id:'security',label:'Security center',icon:Shield},{id:'logs',label:'Activity logs',icon:ScrollText},{id:'settings',label:'Hospital settings',icon:Settings}]
-  const items=identity==='super-admin'?superAdminItems:identity==='operations'?operationalItems:[{id:'reception',label:'Patient directory',icon:Users},{id:'registration',label:'Registration',icon:UserPlus},{id:'receptionAppointments',label:'Appointments',icon:CalendarDays},{id:'checkin',label:'Check-in queue',icon:ClipboardCheck,badge:3}]
-  const identities:Record<HospitalIdentity,[string,string,string]>={
-    'super-admin':['LM','Leila Mansour','Hospital super admin'],'operations':['OH','Omar Haddad','Operations coordinator'],'receptionist':['SA','Sofia Alvarez','Receptionist']
+function OrganizationPortal({ onExit, theme, toggleTheme }: { onExit: () => void; theme: Theme; toggleTheme: () => void }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const reception = location.pathname === '/reception' || location.pathname.startsWith('/reception/')
+  const base = reception ? '/reception' : '/hospital/admin'
+  const view = location.pathname.slice(base.length).split('/').filter(Boolean)[0] || (reception ? 'patients' : 'overview')
+  const items = reception ? [
+    {id:'patients',label:'Patient directory',icon:Users},
+    {id:'registration',label:'Registration',icon:UserPlus},
+    {id:'appointments',label:'Appointments',icon:CalendarDays},
+    {id:'checkin',label:'Check-in queue',icon:ClipboardCheck},
+    {id:'security',label:'Account security',icon:ShieldCheck},
+  ] : [
+    {id:'overview',label:'Overview',icon:Gauge},
+    {id:'departments',label:'Departments',icon:Hospital},
+    {id:'clinicians',label:'Doctors',icon:BriefcaseMedical},
+    {id:'staffing',label:'Staff directory',icon:UserCog},
+    {id:'access',label:'Staff invitations',icon:LockKeyhole},
+    {id:'security',label:'Account security',icon:ShieldCheck},
+    {id:'settings',label:'Organisation settings',icon:Settings},
+  ]
+  let page: React.ReactNode = <UnavailablePage/>
+  if (view === 'security') page = <AccountSecurityPage/>
+  else if (reception) {
+    if (view === 'patients') page = <AdministrativePatientRegistryPage/>
+    if (view === 'registration') page = <AdministrativePatientRegistryPage mode="registration"/>
+    if (view === 'appointments') page = <AppointmentLifecyclePage scope="reception"/>
+    if (view === 'checkin') page = <AppointmentLifecyclePage scope="reception" checkInOnly/>
+  } else {
+    if (view === 'overview' || view === 'statistics') page = <OrganisationOverviewPage/>
+    if (view === 'departments') page = <OrganisationDepartmentsPage/>
+    if (view === 'clinicians') page = <OrganisationStaffDirectoryPage doctorsOnly/>
+    if (view === 'staffing') page = <OrganisationStaffDirectoryPage/>
+    if (view === 'access') page = <OrganisationStaffInvitationsPage/>
+    if (view === 'settings') page = <OrganisationSettingsPage/>
+    if (view === 'logs') page = <UnavailablePage title="Audit history is not available yet" copy="Phase 7 will add authorised central audit queries. No local demonstration events are presented as security evidence."/>
   }
-  const base=identity==='super-admin'?'/hospital/admin':identity==='operations'?'/hospital/operations':'/reception'
-  const pathFor:Record<OrganizationView,string>={command:'overview',departments:'departments',clinicians:'clinicians',flow:'flow',capacity:'capacity',staffing:'staffing',admissions:'admissions',discharges:'discharges',incidents:'incidents',handover:'handover',finance:'finance',claims:'claims',budgets:'budgets',statistics:'statistics',access:'access',security:'security',logs:'logs',settings:'settings',reception:'patients',registration:'registration',receptionAppointments:'appointments',checkin:'checkin'}
-  const navigateView=(next:OrganizationView)=>routerNavigate(`${base}/${pathFor[next]}`)
-  useEffect(()=>{const next=routeMap[location.pathname.split('/').at(-1)||''];setView(next||(identity==='receptionist'?'reception':'command'))},[identity,location.pathname])
-  const identityLabel=<span className="identity-context"><KeyRound/>{identity==='super-admin'?'Super admin':identity==='operations'?'Operations':'Receptionist'}</span>
-  return <PortalShell role={identity==='receptionist'?'Receptionist':'Organisation'} active={view} setActive={navigateView as never} items={items} onExit={onExit} theme={theme} toggleTheme={toggleTheme} topbarExtra={identityLabel} profileOverride={identities[identity]}>
-    {identity==='receptionist'?<>{view==='reception'&&<AdministrativePatientRegistryPage/>}{view==='registration'&&<AdministrativePatientRegistryPage mode="registration"/>}{view==='receptionAppointments'&&<AppointmentLifecyclePage scope="reception"/>}{view==='checkin'&&<ReceptionCheckIn/>}</>:<>{view==='command'&&<OrganizationCommandConnected navigate={navigateView}/>} {view==='departments'&&<DepartmentBoardConnected/>} {view==='clinicians'&&(identity==='super-admin'?<OrganisationStaffDirectoryPage doctorsOnly/>:<ClinicalTeamsConnected/>)} {view==='flow'&&<PatientFlow/>} {view==='capacity'&&<BedManagementPage/>} {view==='staffing'&&(identity==='super-admin'?<OrganisationStaffDirectoryPage/>:<StaffManagementPage/>)}{view==='admissions'&&<AdmissionFlowPage/>}{view==='discharges'&&<AdmissionFlowPage mode="discharges"/>}{view==='incidents'&&<IncidentManagementPage/>}{view==='handover'&&<ConnectedHandoverPage/>}{identity==='super-admin'&&view==='finance'&&<FinanceManagementPage initial="invoices"/>}{identity==='super-admin'&&view==='claims'&&<HospitalClaims/>}{identity==='super-admin'&&view==='budgets'&&<FinanceManagementPage initial="budgets"/>}{identity==='super-admin'&&view==='statistics'&&<HospitalStatisticsConnected/>}{identity==='super-admin'&&view==='access'&&<OrganisationStaffInvitationsPage/>}{identity==='super-admin'&&view==='security'&&<HospitalSecurity/>}{identity==='super-admin'&&view==='logs'&&<ActivityLogsConnected/>}{identity==='super-admin'&&view==='settings'&&<HospitalSettingsPage/>}</>}
-  </PortalShell>
+  return <PortalShell role={reception ? 'Receptionist' : 'Organisation'} active={view} setActive={next => navigate(`${base}/${next}`)} items={items} onExit={onExit} theme={theme} toggleTheme={toggleTheme} topbarExtra={<Link className="secondary" to="/organisations/select">Change organisation</Link>}>{page}</PortalShell>
 }
 
 function OrganizationCommand({navigate}:{navigate:(view:OrganizationView)=>void}) {
@@ -878,10 +908,10 @@ export default function App() {
     <Route path="/organisations/select" element={<ProtectedRoute><OrganisationSelectionPage/></ProtectedRoute>}/>
     <Route path="/doctor/*" element={<ProtectedRoute roles={['doctor']}><AppShell onExit={exit} theme={theme} toggleTheme={toggleTheme}/></ProtectedRoute>}/>
     <Route path="/patient/*" element={<ProtectedRoute roles={['patient']}><PatientPortal onExit={exit} theme={theme} toggleTheme={toggleTheme}/></ProtectedRoute>}/>
-    <Route path="/hospital/operations/*" element={<ProtectedRoute roles={['hospital-operations']}><OrganizationPortal onExit={exit} theme={theme} toggleTheme={toggleTheme}/></ProtectedRoute>}/>
+    <Route path="/hospital/operations/*" element={<ProtectedRoute roles={['hospital-operations']}><UnavailablePage/></ProtectedRoute>}/>
     <Route path="/hospital/admin/*" element={<ProtectedRoute roles={['hospital-super-admin']}><OrganizationPortal onExit={exit} theme={theme} toggleTheme={toggleTheme}/></ProtectedRoute>}/>
     <Route path="/reception/*" element={<ProtectedRoute roles={['receptionist']}><OrganizationPortal onExit={exit} theme={theme} toggleTheme={toggleTheme}/></ProtectedRoute>}/>
-    <Route path="/staff/*" element={<ProtectedRoute roles={['staff']}><StaffPortal onExit={exit} theme={theme} toggleTheme={toggleTheme}/></ProtectedRoute>}/>
+    <Route path="/staff/*" element={<ProtectedRoute roles={['staff']}><UnavailablePage/></ProtectedRoute>}/>
     <Route path="/platform/*" element={<ProtectedRoute roles={['platform-admin']}><AdminPortal onExit={exit} theme={theme} toggleTheme={toggleTheme}/></ProtectedRoute>}/>
     <Route path="/forbidden" element={<ForbiddenState back={()=>navigate(auth.session?roleHome[auth.session.user.role]:'/login')}/>}/>
     <Route path="/privacy" element={<LegalPage kind="Privacy"/>}/><Route path="/terms" element={<LegalPage kind="Terms"/>}/>

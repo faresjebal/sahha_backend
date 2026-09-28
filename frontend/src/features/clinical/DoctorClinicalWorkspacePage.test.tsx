@@ -34,7 +34,7 @@ vi.mock('../../services/api/medicalFileRestService', () => ({
   medicalFileRestService:fileService,
 }))
 vi.mock('../../app/auth/AuthProvider', () => ({
-  useAuth:() => ({ session:{ user:{ organizationId:'organisation-1' } } }),
+  useAuth:() => ({ session:{ user:{ id:'doctor-1', organizationId:'organisation-1' } } }),
 }))
 
 const record:ClinicalRecordResource = {
@@ -100,6 +100,20 @@ const renderPage = () => {
 }
 
 describe('Doctor clinical workspace', () => {
+  it('does not offer another doctor’s appointments from an administrative list in the care queue', async () => {
+    appointmentService.list.mockResolvedValue([
+      { id:'own-appointment', doctorUserId:'doctor-1', patientRegistrationId:'own-registration', startsAt:'2030-01-01T10:00:00Z', status:'IN_PROGRESS', locationLabel:'Own clinical room' },
+      { id:'other-appointment', doctorUserId:'other-doctor', patientRegistrationId:'other-registration', startsAt:'2030-01-01T10:00:00Z', status:'IN_PROGRESS', locationLabel:'Other clinical room' },
+    ])
+    const client = new QueryClient({ defaultOptions:{ queries:{ retry:false } } })
+    render(<QueryClientProvider client={client}><MemoryRouter><DoctorClinicalWorkspacePage/></MemoryRouter></QueryClientProvider>)
+    await screen.findByText(/Own clinical room/)
+    expect(screen.queryByText(/Other clinical room/)).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name:'Open consultation' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name:'Open consultation' }))
+    await waitFor(() => expect(consultationService.create).toHaveBeenCalledWith({ appointmentId:'own-appointment' }))
+    expect(client.getQueryData(['clinical-appointment-queue','organisation-1'])).toHaveLength(2)
+  })
   afterEach(() => cleanup())
 
   beforeEach(() => {

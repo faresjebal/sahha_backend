@@ -1,9 +1,20 @@
 export type NotificationType =
+  | 'APPOINTMENT_CONFIRMED'
+  | 'APPOINTMENT_REJECTED'
+  | 'APPOINTMENT_STARTED'
+  | 'APPOINTMENT_COMPLETED'
+  | 'APPOINTMENT_NO_SHOW'
   | 'APPOINTMENT_REQUESTED'
   | 'APPOINTMENT_RESCHEDULED'
   | 'APPOINTMENT_CANCELLED'
   | 'PATIENT_CHECKED_IN'
   | 'MESSAGE_RECEIVED'
+  | 'REFERRAL_RECEIVED'
+  | 'REFERRAL_ACCEPTED'
+  | 'REFERRAL_REJECTED'
+  | 'REFERRAL_REVOKED'
+  | 'REFERRAL_COMPLETED'
+  | 'REFERRAL_EXPIRED'
 
 export type NotificationAppointmentStatus =
   | 'REQUESTED'
@@ -58,11 +69,22 @@ export interface RealtimeNotificationMessage {
 }
 
 const notificationTypes = new Set<NotificationType>([
+  'APPOINTMENT_CONFIRMED',
+  'APPOINTMENT_REJECTED',
+  'APPOINTMENT_STARTED',
+  'APPOINTMENT_COMPLETED',
+  'APPOINTMENT_NO_SHOW',
   'APPOINTMENT_REQUESTED',
   'APPOINTMENT_RESCHEDULED',
   'APPOINTMENT_CANCELLED',
   'PATIENT_CHECKED_IN',
   'MESSAGE_RECEIVED',
+  'REFERRAL_RECEIVED',
+  'REFERRAL_ACCEPTED',
+  'REFERRAL_REJECTED',
+  'REFERRAL_REVOKED',
+  'REFERRAL_COMPLETED',
+  'REFERRAL_EXPIRED',
 ])
 
 const appointmentStatuses = new Set<NotificationAppointmentStatus>([
@@ -88,14 +110,18 @@ const isNotificationResource = (
     && notificationTypes.has(value.notificationType as NotificationType)
     && typeof value.resourceType === 'string'
     && typeof value.resourceId === 'string'
-    && (value.resourceType === 'CONVERSATION'
-      ? value.notificationType === 'MESSAGE_RECEIVED'
+    && (value.resourceType === 'CONVERSATION' || value.resourceType === 'REFERRAL'
+      ? (value.resourceType === 'CONVERSATION'
+          ? value.notificationType === 'MESSAGE_RECEIVED'
+          : String(value.notificationType).startsWith('REFERRAL_'))
         && value.appointmentStatus === null
         && value.appointmentStartsAt === null
         && value.appointmentEndsAt === null
         && value.appointmentTimeZone === null
         && value.appointmentLocationLabel === null
       : value.resourceType === 'APPOINTMENT'
+        && !String(value.notificationType).startsWith('REFERRAL_')
+        && value.notificationType !== 'MESSAGE_RECEIVED'
         && appointmentStatuses.has(value.appointmentStatus as NotificationAppointmentStatus)
         && typeof value.appointmentStartsAt === 'string'
         && typeof value.appointmentEndsAt === 'string'

@@ -146,7 +146,7 @@ class AppointmentNotificationIntegrationTests {
 	}
 
 	@Test
-	void doctorAuthoredDecisionIsConsumedWithoutInventingAPatientRecipient() {
+	void doctorAuthoredDecisionCreatesNoStaffSelfNotification() {
 		UUID appointmentId = UUID.randomUUID();
 		UUID doctorUserId = UUID.randomUUID();
 		UUID organisationId = UUID.randomUUID();
@@ -164,11 +164,11 @@ class AppointmentNotificationIntegrationTests {
 				Instant.parse("2027-01-04T09:00:00Z"));
 
 		assertEquals(
-				AppointmentEventProcessingResult.NO_ELIGIBLE_RECIPIENT,
+				AppointmentEventProcessingResult.NOTIFICATION_CREATED,
 				service.consume(event, source(4L)));
 
 		assertEquals(
-				ConsumedEventOutcome.NO_ELIGIBLE_RECIPIENT,
+				ConsumedEventOutcome.NOTIFICATION_CREATED,
 				consumedRepository.findById(event.eventId()).orElseThrow()
 						.getOutcome());
 		assertEquals(0, notificationRepository.count());
@@ -226,7 +226,7 @@ class AppointmentNotificationIntegrationTests {
 				Instant.parse("2027-01-04T09:30:00Z"));
 
 		assertEquals(
-				AppointmentEventProcessingResult.NO_ELIGIBLE_RECIPIENT,
+				AppointmentEventProcessingResult.NOTIFICATION_CREATED,
 				service.consume(started, source(7L)));
 		assertEquals(0, notificationRepository.count());
 	}

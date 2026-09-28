@@ -28,18 +28,20 @@ public class AppointmentNotificationService {
 	private final InAppNotificationRepository notificationRepository;
 	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
+	private final com.sahha.notification.patient.PatientNotificationRepository patientNotifications;
 
 	public AppointmentNotificationService(
 			ConsumedAppointmentEventRepository consumedEventRepository,
 			AppointmentNotificationCursorRepository cursorRepository,
 			InAppNotificationRepository notificationRepository,
 			ApplicationEventPublisher eventPublisher,
-			Clock clock) {
+			Clock clock, com.sahha.notification.patient.PatientNotificationRepository patientNotifications) {
 		this.consumedEventRepository = consumedEventRepository;
 		this.cursorRepository = cursorRepository;
 		this.notificationRepository = notificationRepository;
 		this.eventPublisher = eventPublisher;
 		this.clock = clock;
+		this.patientNotifications = patientNotifications;
 	}
 
 	@Transactional
@@ -72,10 +74,13 @@ public class AppointmentNotificationService {
 
 		Optional<NotificationType> notificationType =
 				doctorNotificationType(event);
+		var patientNotification = patientNotifications.create(event, processedAt);
+		eventPublisher.publishEvent(new com.sahha.notification.patient.PatientNotificationCreated(
+				event.patientId(), event.organisationId(), patientNotification));
 		if (notificationType.isEmpty()) {
 			consumed.complete(
-					ConsumedEventOutcome.NO_ELIGIBLE_RECIPIENT, processedAt);
-			return AppointmentEventProcessingResult.NO_ELIGIBLE_RECIPIENT;
+					ConsumedEventOutcome.NOTIFICATION_CREATED, processedAt);
+			return AppointmentEventProcessingResult.NOTIFICATION_CREATED;
 		}
 
 		InAppNotification notification = notificationRepository.save(

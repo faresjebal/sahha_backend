@@ -42,6 +42,9 @@ class NotificationPersistenceIntegrationTests {
 			"appointment_notification_cursor",
 			"consumed_communication_event",
 			"rejected_communication_event",
+			"consumed_referral_event",
+			"referral_notification_cursor",
+			"patient_appointment_notification",
 			"in_app_notification"
 		}) {
 			assertEquals(
@@ -52,6 +55,6 @@ class NotificationPersistenceIntegrationTests {
 							String.class));
 		}
 		assertNotNull(flyway.info().current());
-		assertEquals("3", flyway.info().current().getVersion().getVersion());
+		assertEquals("5", flyway.info().current().getVersion().getVersion());
 	}
 }

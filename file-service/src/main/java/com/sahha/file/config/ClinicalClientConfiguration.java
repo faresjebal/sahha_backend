@@ -27,6 +27,9 @@ public class ClinicalClientConfiguration {
 	RestClient fileClinicalRestClient(
 			@LoadBalanced RestClient.Builder builder,
 			ClinicalClientProperties properties) {
-		return builder.baseUrl(properties.baseUrl().toString()).build();
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(java.time.Duration.ofSeconds(2));
+        factory.setReadTimeout(java.time.Duration.ofSeconds(5));
+        return builder.requestFactory(factory).baseUrl(properties.baseUrl().toString()).build();
 	}
 }

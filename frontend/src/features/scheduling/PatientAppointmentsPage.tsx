@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { AvailableSlotResource } from '../../models/scheduling'
 import { ApiError, apiErrorMessage } from '../../services/api/ApiError'
 import { appointmentRestService } from '../../services/api/appointmentRestService'
@@ -38,9 +39,10 @@ const statusLabel = (value: string) => value.toLowerCase()
   .split('_').map(part => part[0].toUpperCase() + part.slice(1)).join(' ')
 
 export function PatientAppointmentsPage() {
+  const [searchParams] = useSearchParams()
   const queryClient = useQueryClient()
-  const [registrationId, setRegistrationId] = useState('')
-  const [doctorUserId, setDoctorUserId] = useState('')
+  const [registrationId, setRegistrationId] = useState(searchParams.get('registration') || '')
+  const [doctorUserId, setDoctorUserId] = useState(searchParams.get('doctor') || '')
   const [from, setFrom] = useState(dateValue(1))
   const [to, setTo] = useState(dateValue(7))
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlotResource | null>(null)
@@ -57,6 +59,10 @@ export function PatientAppointmentsPage() {
 
   const registrations = registrationsQuery.data || []
   useEffect(() => {
+    const requested = searchParams.get('registration')
+    if (requested) setRegistrationId(requested)
+  }, [searchParams])
+  useEffect(() => {
     if (!registrations.length) return
     if (!registrations.some(item => item.registrationId === registrationId)) {
       setRegistrationId(registrations[0].registrationId)
@@ -70,6 +76,7 @@ export function PatientAppointmentsPage() {
   })
 
   useEffect(() => {
+    if (doctorsQuery.isPending) return
     const doctors = doctorsQuery.data || []
     if (!doctors.length) {
       setDoctorUserId('')
@@ -79,7 +86,7 @@ export function PatientAppointmentsPage() {
       setDoctorUserId(doctors[0].doctorUserId)
       setSelectedSlot(null)
     }
-  }, [doctorUserId, doctorsQuery.data])
+  }, [doctorUserId, doctorsQuery.data, doctorsQuery.isPending])
 
   const slotsKey = ['my-patient-slots', registrationId, doctorUserId, from, to]
   const slotsQuery = useQuery({
@@ -113,7 +120,7 @@ export function PatientAppointmentsPage() {
     onSuccess:() => {
       setNotice('Your appointment request was sent.')
       setSelectedSlot(null)
-      void queryClient.invalidateQueries({ queryKey:appointmentsKey })
+      void queryClient.invalidateQueries({ queryKey:['my-patient-appointments'] })
       void queryClient.invalidateQueries({ queryKey:slotsKey })
     },
   })

@@ -7,13 +7,13 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
-final class UploadIntegrityInputStream extends FilterInputStream {
+public final class UploadIntegrityInputStream extends FilterInputStream {
 
 	private final MessageDigest digest;
 	private final long maximumBytes;
 	private long count;
 
-	UploadIntegrityInputStream(InputStream input, long maximumBytes) {
+	public UploadIntegrityInputStream(InputStream input, long maximumBytes) {
 		super(input);
 		if (maximumBytes <= 0) {
 			throw new IllegalArgumentException("maximumBytes must be positive");
@@ -47,11 +47,11 @@ final class UploadIntegrityInputStream extends FilterInputStream {
 		return read;
 	}
 
-	long count() {
+	public long count() {
 		return count;
 	}
 
-	String checksumSha256() {
+	public String checksumSha256() {
 		return HexFormat.of().formatHex(digest.digest());
 	}
 

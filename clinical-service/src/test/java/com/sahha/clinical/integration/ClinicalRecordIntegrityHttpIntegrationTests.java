@@ -3,6 +3,8 @@ package com.sahha.clinical.integration;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
+import com.sahha.clinical.client.organisation.OrganisationDoctorClient;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -59,6 +61,7 @@ class ClinicalRecordIntegrityHttpIntegrationTests {
 	@Autowired private JdbcTemplate jdbcTemplate;
 	@MockitoBean private JwtDecoder jwtDecoder;
 	@MockitoBean private SchedulingClinicalContextClient schedulingClient;
+	@MockitoBean private OrganisationDoctorClient doctors;
 
 	@Test
 	void structuredDraftFinalizationAndCorrectionsPreserveSignedSource()
@@ -194,8 +197,13 @@ class ClinicalRecordIntegrityHttpIntegrationTests {
 				.andExpect(jsonPath("$.clinicalAssessment")
 						.value("Corrected assessment"));
 		org.junit.jupiter.api.Assertions.assertEquals(
-				1, accessAuditRepository.countByResourceTypeAndResourceId(
+				8, accessAuditRepository.countByResourceTypeAndResourceId(
 						"CONSULTATION", consultationId));
+		// Seven live-author decisions plus the effective-record read audit.
+		org.junit.jupiter.api.Assertions.assertEquals(7,
+				accessAuditRepository.findAll().stream().filter(event ->
+						consultationId.equals(event.getResourceId())
+						&& "AUTHOR_MEMBERSHIP_VERIFIED".equals(event.getAccessReason())).count());
 
 		UUID finalizationEventId = outboxRepository
 				.findFirstByAggregateIdAndEventTypeOrderByOccurredAtDesc(
@@ -256,7 +264,7 @@ class ClinicalRecordIntegrityHttpIntegrationTests {
 					.cookie(access(OTHER_TOKEN)))
 				.andExpect(status().isNotFound());
 		org.junit.jupiter.api.Assertions.assertEquals(
-				1, accessAuditRepository.countByResourceTypeAndResourceId(
+				2, accessAuditRepository.countByResourceTypeAndResourceId(
 						"CONSULTATION", consultationId));
 		mockMvc.perform(put(
 				"/api/v1/consultations/{id}/draft-content", consultationId)
@@ -385,10 +393,13 @@ class ClinicalRecordIntegrityHttpIntegrationTests {
 				.claim("org_roles", roles).claim("token_type", "access").build();
 	}
 
-	private static Fixture fixture() {
-		return new Fixture(
+	private Fixture fixture() {
+		Fixture value = new Fixture(
 				UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
 				UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+		when(doctors.requireCurrentMembership(eq(value.organisationId()), eq(value.doctorUserId()),
+				eq(DOCTOR_TOKEN), anyString())).thenReturn(value.doctorMembershipId());
+		return value;
 	}
 
 	private static Cookie access(String token) {

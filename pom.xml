@@ -26,6 +26,7 @@
 	</properties>
 
 	<modules>
+		<module>session-security</module>
 		<module>discovery-server</module>
 		<module>config-server</module>
 		<module>api-gateway</module>

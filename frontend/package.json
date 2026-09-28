@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "test": "vitest run",
+    "test:notification-layer": "node --test scripts/notification-layer-check.mjs",
     "validate:ui": "node scripts/visual-check.mjs",
     "smoke:auth": "node scripts/auth-live-smoke.mjs",
     "smoke:roles": "node scripts/role-live-smoke.mjs",

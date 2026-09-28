@@ -112,4 +112,20 @@ describe('real frontend authentication pages', () => {
     expect(await screen.findByText('Your account is ready')).toBeInTheDocument()
     expect(screen.getByRole('button', { name:/Continue to sign in/i })).toBeInTheDocument()
   })
+
+  it.each([true, false])('restores a Doctor return route only with an explicit Doctor assignment (%s)', async isDoctor => {
+    authService.login.mockResolvedValue({ ...patientSession,
+      user:{ ...patientSession.user, role:'hospital-super-admin', organizationId:'org-a' },
+      platformRoles:[], organisationRoles:isDoctor ? ['ORGANIZATION_ADMIN','DOCTOR'] : ['ORGANIZATION_ADMIN'],
+    })
+    render(<MemoryRouter initialEntries={[{ pathname:'/login', state:{ from:'/doctor/clinical/synthetic-record' } }]}><AuthProvider><Routes>
+      <Route path="/login" element={<LoginPage/>}/>
+      <Route path="/doctor/clinical/synthetic-record" element={<p>Returned to clinical record</p>}/>
+      <Route path="/hospital/admin/overview" element={<p>Returned to administration</p>}/>
+    </Routes></AuthProvider></MemoryRouter>)
+    fireEvent.change(screen.getByLabelText('Email'), { target:{ value:'amal@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target:{ value:'Synthetic passphrase 2026!' } })
+    fireEvent.click(screen.getByRole('button', { name:/Enter workspace/i }))
+    await screen.findByText(isDoctor ? 'Returned to clinical record' : 'Returned to administration')
+  })
 })

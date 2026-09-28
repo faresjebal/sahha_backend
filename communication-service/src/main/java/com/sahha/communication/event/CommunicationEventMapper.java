@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import com.sahha.communication.entity.CommunicationAuditEvent;
 import com.sahha.communication.entity.ConversationMessage;
 import com.sahha.communication.entity.ConversationThread;
+import com.sahha.communication.entity.ReferralRequest;
 
 @Component
 public class CommunicationEventMapper {
@@ -27,6 +28,22 @@ public class CommunicationEventMapper {
 		payload.put("messageId", message.getId().toString());
 		payload.put("senderUserId", message.getSenderUserId().toString());
 		payload.put("recipientUserIds", recipientUserIds.stream().map(UUID::toString).toList());
+		return Map.copyOf(payload);
+	}
+
+	public Map<String,Object> referralChanged(CommunicationAuditEvent audit,
+			ReferralRequest referral, String eventType, List<UUID> recipientUserIds) {
+		Map<String,Object> payload = new LinkedHashMap<>();
+		payload.put("eventId", audit.getId().toString());
+		payload.put("eventType", eventType);
+		payload.put("schemaVersion", 1);
+		payload.put("occurredAt", audit.getOccurredAt().toString());
+		payload.put("organisationId", referral.getOrganisationId().toString());
+		payload.put("referralId", referral.getId().toString());
+		payload.put("actorUserId", audit.getActorUserId().toString());
+		payload.put("recipientUserIds", recipientUserIds.stream().map(UUID::toString).toList());
+		payload.put("status", referral.getStatus().name());
+		payload.put("resourceVersion", audit.getResourceVersion());
 		return Map.copyOf(payload);
 	}
 

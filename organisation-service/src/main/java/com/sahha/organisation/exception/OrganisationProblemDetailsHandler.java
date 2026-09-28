@@ -24,6 +24,13 @@ import com.sahha.organisation.config.RequestIdFilter;
 @RestControllerAdvice
 public class OrganisationProblemDetailsHandler {
 
+	@ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+	ResponseEntity<ProblemDetail> profileVersionConflict(HttpServletRequest request) {
+		return response(HttpStatus.CONFLICT, problem(HttpStatus.CONFLICT,
+				"Profile version changed", "Reload the current profile before saving again.",
+				"urn:sahha:problem:profile-version-conflict", request));
+	}
+
 	private static final Logger LOGGER =
 			LoggerFactory.getLogger(OrganisationProblemDetailsHandler.class);
 

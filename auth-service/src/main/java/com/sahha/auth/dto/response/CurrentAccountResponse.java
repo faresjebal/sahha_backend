@@ -11,7 +11,9 @@ public record CurrentAccountResponse(
 		String firstName,
 		String lastName,
 		AccountStatus status,
-		boolean emailVerified) {
+		boolean emailVerified,
+		String phoneNumber,
+		long version) {
 
 	public static CurrentAccountResponse from(UserAccount account) {
 		return new CurrentAccountResponse(
@@ -20,6 +22,8 @@ public record CurrentAccountResponse(
 				account.getFirstName(),
 				account.getLastName(),
 				account.getStatus(),
-				account.getEmailVerifiedAt() != null);
+				account.getEmailVerifiedAt() != null,
+				account.getPhoneNumber(),
+				account.getVersion());
 	}
 }

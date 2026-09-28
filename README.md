@@ -31,14 +31,50 @@ file-service/          Protected medical files
 audit-service/         Append-only audit foundation
 frontend/              React and TypeScript application
 docs/                  Product context and living implementation plan
-infrastructure/        Local platform configuration (planned)
-scripts/               Root developer automation (planned)
+infrastructure/        Ignored native runtime state and local configuration
+scripts/               Native developer commands and performance checks
 ```
 
 All backend applications are independent Spring Boot Maven modules aggregated
 by the root `pom.xml`.
 
 ## Current commands
+
+The workflow is Docker-free. Read
+[`docs/NATIVE_DEVELOPMENT.md`](docs/NATIVE_DEVELOPMENT.md) for prerequisites,
+safe process ownership, event switches and Azure preparation.
+
+```powershell
+node scripts/sahha.mjs check
+node scripts/sahha.mjs build backend
+node scripts/sahha.mjs start foundation
+node scripts/sahha.mjs status
+node scripts/sahha.mjs stop
+```
+
+Use `start all` for all backend applications or explicit service names. Root
+`test backend`, `test frontend`, `test tools` and `build frontend` are also
+available. Only launcher-owned processes are controlled; data is never reset.
+
+The separate [synthetic development bootstrap](docs/SYNTHETIC_BOOTSTRAP.md) creates
+nine isolated PostgreSQL databases on loopback port `15432` and validates their
+service-owned migrations. Its explicitly confirmed reset creates a new generation
+and retains the old data; it never resets development databases on `5432`.
+Repeatable synthetic account/staff, patient/appointment, clinical and messaging
+REST/Kafka checks, protected-file recovery/fresh upload, isolated Redis/Kafka/
+SeaweedFS restart checks and all twelve application smoke checks now pass.
+Temporary helpers shut down automatically. The full referral/browser demonstration
+and clean-machine acceptance remain tracked work; see the guide for per-gate evidence.
+
+For the ordered temporary demo, configure the installed native paths in
+[the setup guide](docs/SYNTHETIC_BOOTSTRAP.md#ordered-setup-from-installed-prerequisites),
+then run `node scripts/synthetic-setup.mjs check` and
+`node scripts/synthetic-setup.mjs run`. Preflight is read-only; the fixed sequence
+reuses or initialises only isolated synthetic data, checks retained identities and
+stops owned helpers between stages. It never installs software or resets data.
+The retained-data sequence passed all 16 stages on 2026-09-20, with all temporary
+services stopped. Fresh-checkout/empty-generation and clean-machine acceptance
+remain open; this does not certify Azure readiness.
 
 Run all backend module tests:
 
@@ -76,10 +112,27 @@ is in [`docs/FRONTEND_AUTH_GUIDE.md`](docs/FRONTEND_AUTH_GUIDE.md).
 
 Auth uses the native Memurai Windows service as its disposable local
 Redis-compatible session cache, so Docker Desktop and WSL do not need to run.
-Verification, optional Redis Insight setup, environment variables, and
-Docker/WSL alternatives are in
+Verification, optional Redis Insight setup and environment variables are in
 [`docs/LOCAL_REDIS.md`](docs/LOCAL_REDIS.md). Auth continues to use PostgreSQL
 if the cache is unavailable.
+
+Gateway and implemented resource services now require a fresh Auth-owned session
+decision after local JWT validation, including direct-service requests. This
+uses the non-deployable `session-security` module. Internal address configuration,
+outage behavior and WebSocket enforcement are documented in
+[`docs/SESSION_SECURITY.md`](docs/SESSION_SECURITY.md). Single-service Maven
+commands for clients should include `-am` to build the shared dependency.
+
+Backend operation permissions and their explicit role bundles are documented in
+[`docs/BACKEND_PERMISSIONS.md`](docs/BACKEND_PERMISSIONS.md). Each service owns
+its catalogue; the shared library supplies only immutable claim conversion.
+Auth also uses this converter, so include `-am` when building/testing Auth alone.
+Permissions never replace live membership, resource ownership or sharing checks.
+
+Local operational probes have a separate, credential-independent policy. The
+native launcher requires liveness and readiness, not aggregate diagnostic health.
+See [health/readiness](docs/HEALTH_READINESS.md) for the dependency matrix and
+`node scripts/health-smoke.mjs all` for the packaged-service smoke checks.
 
 Package all executable backend JARs:
 
@@ -89,9 +142,10 @@ Package all executable backend JARs:
 
 In IntelliJ, reload the root Maven project once after opening the repository.
 The Run dropdown then contains one shared configuration for every application,
-plus `Sahha - Infrastructure` and `Sahha - All Services`. Auth uses its
-PostgreSQL-backed `local` profile; Patient keeps its temporary database-free
-local profile until its vertical slice begins.
+plus `Sahha - Infrastructure` and `Sahha - All Services`. Implemented domain
+services use their owned PostgreSQL databases. Audit now has its owned Flyway
+foundation; central ingestion and authorised queries remain Phase 7 work, with
+all business endpoints denied. See [Audit persistence](docs/AUDIT_PERSISTENCE.md).
 
 Default local ports:
 
@@ -132,8 +186,10 @@ Generated development connection settings are in the gitignored
 `sahha_auth_test` database that its guarded integration tests may clean and
 rebuild. Organisation owns Flyway version 2 in `sahha_organisation`; its tests
 use the separate `organisation_test` schema and never clean the development
-schema. Other service databases remain empty until their owning services
-introduce Flyway migrations.
+schema. Patient, Scheduling, Clinical, Communication, Notification and File also
+own Flyway-backed slices and isolated test schemas. Audit V1 uses its own database
+and guarded `audit_test` schema, with no central ingestion/API yet. See the living
+plan for current migration/validation evidence.
 
 Run the migrated frontend:
 
@@ -151,5 +207,8 @@ npm test
 npm run build
 ```
 
-Portable infrastructure start/stop commands will be added when Docker Compose
-is introduced later in Phase 1.
+Native service automation, isolated database generation/reset, identity/staff,
+patient/appointment, clinical, file and messaging seeds and dependency probes are
+available now. Native prerequisite installation is explicit/manual; full demo and
+clean-machine verification remain tracked work. Azure
+deployment does not require adding Docker to this project.

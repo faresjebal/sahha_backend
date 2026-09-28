@@ -201,6 +201,29 @@ class AppointmentBookingHttpIntegrationTests {
 				outbox.getPayload().containsKey("patientRegistrationId"));
 		org.junit.jupiter.api.Assertions.assertFalse(
 				outbox.getPayload().containsKey("actorMembershipId"));
+
+        workspace(DOCTOR_TOKEN, organisationId, doctorUserId, doctorMembershipId, "DOCTOR");
+        when(doctorDirectoryClient.findActiveDoctor(organisationId, doctorUserId, DOCTOR_TOKEN))
+                .thenReturn(new SchedulingDoctorResource(doctorMembershipId, organisationId,
+                        doctorUserId, "Synthetic retry doctor", 1));
+        Instant moved = startsAt.plusSeconds(1800);
+        mockMvc.perform(post("/api/v1/appointments/{id}/reschedule", appointmentId)
+                .cookie(access(DOCTOR_TOKEN), csrf()).header("X-XSRF-TOKEN", "booking-csrf-token")
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                    {"commandRequestId":"%s","version":0,"startsAt":"%s","reason":"Synthetic retry regression"}
+                    """.formatted(UUID.randomUUID(), moved)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("RESCHEDULED"));
+        mockMvc.perform(post("/api/v1/appointments").cookie(access(RECEPTIONIST_TOKEN), csrf())
+                .header("X-XSRF-TOKEN", "booking-csrf-token").contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(appointmentId.toString()))
+                .andExpect(jsonPath("$.startsAt").value(moved.toString()));
+        mockMvc.perform(post("/api/v1/appointments").cookie(access(RECEPTIONIST_TOKEN), csrf())
+                .header("X-XSRF-TOKEN", "booking-csrf-token").contentType(MediaType.APPLICATION_JSON)
+                .content(bookingBody(bookingRequestId, patientRegistrationId, doctorUserId, moved)))
+                .andExpect(status().isConflict());
+        org.junit.jupiter.api.Assertions.assertEquals(1, appointmentRepository.countByOrganisationId(organisationId));
+        org.junit.jupiter.api.Assertions.assertEquals(2, auditRepository.countByAppointmentId(appointmentId));
+        org.junit.jupiter.api.Assertions.assertEquals(2, outboxRepository.countByAppointmentId(appointmentId));
 	}
 
 	@Test

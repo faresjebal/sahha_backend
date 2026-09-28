@@ -30,6 +30,8 @@ public class ConversationThread {
 	private String subject;
 	@Column(name = "patient_registration_id", updatable = false)
 	private UUID patientRegistrationId;
+	@Column(name = "source_consultation_id", updatable = false)
+	private UUID sourceConsultationId;
 	@Column(name = "created_by_user_id", nullable = false, updatable = false)
 	private UUID createdByUserId;
 	@Column(name = "created_by_membership_id", nullable = false, updatable = false)
@@ -57,6 +59,17 @@ public class ConversationThread {
 		value.createdAt = Objects.requireNonNull(now);
 		value.updatedAt = now;
 		value.lastMessageAt = now;
+		return value;
+	}
+
+	public static ConversationThread createWithSource(UUID id, UUID organisationId,
+			UUID requestId, String subject, UUID patientRegistrationId, UUID actorUserId,
+			UUID actorMembershipId, Instant now, UUID sourceConsultationId) {
+		if (sourceConsultationId != null && patientRegistrationId == null)
+			throw new IllegalArgumentException("A consultation source requires patient context");
+		var value = create(id, organisationId, requestId, subject, patientRegistrationId,
+				actorUserId, actorMembershipId, now);
+		value.sourceConsultationId = sourceConsultationId;
 		return value;
 	}
 

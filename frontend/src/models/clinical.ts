@@ -1,4 +1,11 @@
 export type ConsultationStatus = 'DRAFT' | 'FINALIZED'
+export interface ReferralSourcePageResource {
+  content:Array<{ consultationId:string; patientRegistrationId:string; appointmentId:string; finalizedAt:string; version:number }>
+  page:number
+  size:number
+  totalElements:number
+  totalPages:number
+}
 export type SymptomSeverity = 'MILD' | 'MODERATE' | 'SEVERE'
 export type ClinicalHistoryCategory = 'MEDICAL' | 'SURGICAL' | 'FAMILY' | 'ALLERGY'
 export type DiagnosisType = 'PRIMARY' | 'SECONDARY' | 'DIFFERENTIAL'

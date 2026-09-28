@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query'
 import { ApiError } from '../services/api/ApiError'
 
-export const queryClient = new QueryClient({
+export const createQueryClient = () => new QueryClient({
   defaultOptions:{
     queries:{
       staleTime:30_000,
@@ -14,3 +14,5 @@ export const queryClient = new QueryClient({
     mutations:{ retry:false },
   },
 })
+
+export const queryClient = createQueryClient()

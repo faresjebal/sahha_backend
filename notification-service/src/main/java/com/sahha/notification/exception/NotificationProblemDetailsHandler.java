@@ -54,7 +54,7 @@ public class NotificationProblemDetailsHandler {
 				problem(
 						HttpStatus.NOT_FOUND,
 						"Notification not found",
-						"The requested notification was not found for the signed-in user in the active organisation.",
+						"The notification or verified patient registration was not found for the signed-in account.",
 						"urn:sahha:problem:notification-not-found",
 						request));
 	}
@@ -85,6 +85,15 @@ public class NotificationProblemDetailsHandler {
 						"Organisation access could not be verified. Try again later.",
 						"urn:sahha:problem:organisation-context-unavailable",
 						request));
+	}
+
+	@ExceptionHandler(com.sahha.notification.patient.PatientNotificationContextUnavailableException.class)
+	ResponseEntity<ProblemDetail> patientUnavailable(
+			com.sahha.notification.patient.PatientNotificationContextUnavailableException exception,
+			HttpServletRequest request) {
+		return response(HttpStatus.SERVICE_UNAVAILABLE, problem(HttpStatus.SERVICE_UNAVAILABLE,
+				"Patient context unavailable", "Patient ownership could not be verified. Try again later.",
+				"urn:sahha:problem:patient-context-unavailable", request));
 	}
 
 	@ExceptionHandler(Exception.class)

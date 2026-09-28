@@ -1,5 +1,12 @@
 package com.sahha.organisation.config;
 
+import com.sahha.organisation.security.OrganisationPermissions;
+
+import java.net.URI;
+import org.springframework.beans.factory.annotation.Value;
+import com.sahha.session.SessionAuthorityClient;
+import com.sahha.session.SessionCheckingJwtDecoder;
+
 import java.time.Clock;
 import java.util.List;
 
@@ -42,7 +49,7 @@ public class OrganisationSecurityConfiguration {
 
 	@Bean
 	JwtDecoder organisationJwtDecoder(
-			OrganisationSecurityProperties properties) {
+			OrganisationSecurityProperties properties, SessionAuthorityClient sessionAuthority) {
 		NimbusJwtDecoder decoder = NimbusJwtDecoder
 				.withJwkSetUri(properties.jwkSetUri().toString())
 				.jwsAlgorithm(SignatureAlgorithm.RS256)
@@ -65,7 +72,14 @@ public class OrganisationSecurityConfiguration {
 						issuer,
 						audience,
 						new OrganisationAccessTokenValidator())));
-		return decoder;
+		return new SessionCheckingJwtDecoder(decoder, sessionAuthority);
+	}
+
+	@Bean(destroyMethod = "close")
+	SessionAuthorityClient organisationSessionAuthorityClient(
+			OrganisationSecurityProperties properties,
+			@Value("${AUTH_SESSION_CHECK_URI:http://localhost:8081/api/v1/internal/auth/session-check}") URI uri) {
+		return new SessionAuthorityClient(uri, properties.accessTokenCookieName());
 	}
 
 	@Bean
@@ -113,35 +127,27 @@ public class OrganisationSecurityConfiguration {
 								"/swagger-ui.html",
 								"/swagger-ui/**")
 						.permitAll()
-						.requestMatchers("/api/v1/platform/organisations/**")
-						.hasRole("PLATFORM_ADMIN")
-						.requestMatchers(
-								HttpMethod.GET,
-								"/api/v1/organisations/memberships",
-								"/api/v1/organisations/*/membership-context",
-								"/api/v1/organisations/*/scheduling-doctors/*",
-								"/api/v1/organisations/*/patient-doctors/*")
-						.authenticated()
-						.requestMatchers(
-								HttpMethod.GET,
-								"/api/v1/organisations/*/collaboration-doctors",
-								"/api/v1/organisations/*/collaboration-doctors/*")
-						.hasRole("DOCTOR")
-						.requestMatchers("/api/v1/departments/**")
-						.hasRole("ORGANIZATION_ADMIN")
-						.requestMatchers("/api/v1/staff-invitations/**")
-						.hasRole("ORGANIZATION_ADMIN")
-						.requestMatchers(
-								"/api/v1/staff",
-								"/api/v1/staff/**")
-						.hasRole("ORGANIZATION_ADMIN")
-						.requestMatchers(
-								"/api/v1/my/doctor-profile",
-								"/api/v1/my/doctor-profile/**")
-						.hasRole("DOCTOR")
-						.requestMatchers("/api/v1/my/staff-invitations/**")
-						.authenticated()
-						.anyRequest()
+						.requestMatchers(HttpMethod.GET, "/api/v1/platform/organisations/**")
+                        .hasAuthority(OrganisationPermissions.PLATFORM_READ)
+                        .requestMatchers("/api/v1/platform/organisations/**")
+                        .hasAuthority(OrganisationPermissions.PLATFORM_MANAGE)
+                        .requestMatchers("/api/v1/organisations/current/profile")
+                        .hasAuthority(OrganisationPermissions.PROFILE_MANAGE)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/organisations/memberships", "/api/v1/organisations/*/membership-context", "/api/v1/organisations/*/scheduling-doctors/*", "/api/v1/organisations/*/patient-doctors/*")
+                        .hasAuthority(OrganisationPermissions.CONTEXT_READ)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/organisations/*/collaboration-doctors", "/api/v1/organisations/*/collaboration-doctors/*")
+                        .hasAuthority(OrganisationPermissions.COLLEAGUES_READ)
+                        .requestMatchers("/api/v1/departments/**")
+                        .hasAuthority(OrganisationPermissions.DEPARTMENTS_MANAGE)
+                        .requestMatchers("/api/v1/staff-invitations/**")
+                        .hasAuthority(OrganisationPermissions.INVITATIONS_MANAGE)
+                        .requestMatchers("/api/v1/staff", "/api/v1/staff/**")
+                        .hasAuthority(OrganisationPermissions.STAFF_MANAGE)
+                        .requestMatchers("/api/v1/my/doctor-profile", "/api/v1/my/doctor-profile/**")
+                        .hasAuthority(OrganisationPermissions.DOCTOR_PROFILE_SELF)
+                        .requestMatchers("/api/v1/my/staff-invitations/**")
+                        .hasAuthority(OrganisationPermissions.INVITATIONS_SELF)
+                        .anyRequest()
 						.denyAll())
 				.csrf(csrf -> csrf
 						.spa()

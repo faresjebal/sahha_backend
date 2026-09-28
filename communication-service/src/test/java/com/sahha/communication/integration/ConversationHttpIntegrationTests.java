@@ -47,6 +47,26 @@ class ConversationHttpIntegrationTests {
 	@MockitoBean SchedulingPatientContextClient patientContextClient;
 
 	@Test
+	void reservedWebSocketPathIsNotParsedAsAConversationIdAndKeepsRoleChecks() throws Exception {
+		UUID organisationId = UUID.randomUUID();
+		UUID doctorId = UUID.randomUUID();
+		workspace(DOCTOR_TOKEN, organisationId, doctorId, List.of("DOCTOR"));
+		workspace(RECEPTIONIST_TOKEN, organisationId, UUID.randomUUID(), List.of("RECEPTIONIST"));
+		when(organisationClient.resolve(organisationId, doctorId, DOCTOR_TOKEN))
+				.thenReturn(doctor(organisationId, doctorId, UUID.randomUUID(), "Dr Synthetic One"));
+		// MockMvc cannot upgrade a socket. Missing Upgrade must be rejected by the
+		// WebSocket handler, never by the UUID-binding REST controller.
+		mockMvc.perform(get("/api/v1/conversations/ws").cookie(access(DOCTOR_TOKEN)))
+				.andExpect(status().isBadRequest())
+				.andExpect(result -> org.junit.jupiter.api.Assertions.assertInstanceOf(
+						org.springframework.web.socket.server.support.WebSocketHttpRequestHandler.class,
+						result.getHandler()));
+		mockMvc.perform(get("/api/v1/conversations/ws")).andExpect(status().isUnauthorized());
+		mockMvc.perform(get("/api/v1/conversations/ws").cookie(access(RECEPTIONIST_TOKEN)))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
 	void directConversationIsRetrySafeParticipantOnlyAndAppendOnly() throws Exception {
 		UUID organisationId = UUID.randomUUID();
 		UUID doctorId = UUID.randomUUID();

@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.sahha.communication.client.organisation.CollaborationDoctorResource;
 import com.sahha.communication.client.organisation.OrganisationCollaborationClient;
-import com.sahha.communication.client.scheduling.SchedulingPatientContextClient;
+import com.sahha.communication.config.CommunicationOutboxProperties;
 import com.sahha.communication.dto.request.CreateConversationRequest;
 import com.sahha.communication.dto.request.SendMessageRequest;
 import com.sahha.communication.dto.response.ConversationPageResponse;
@@ -46,10 +46,12 @@ public class ConversationService {
 	private final CommunicationAuditEventRepository auditRepository;
 	private final CommunicationOutboxEventRepository outboxRepository;
 	private final OrganisationCollaborationClient organisationClient;
-	private final SchedulingPatientContextClient patientContextClient;
+	private final CollaborationPatientContextService patientContextClient;
 	private final CommunicationEventMapper eventMapper;
 	private final ApplicationEventPublisher eventPublisher;
+	private final CommunicationOutboxProperties outboxProperties;
 	private final Clock clock;
+    private final com.sahha.communication.attachment.MessageAttachmentReferences attachments;
 
 	@Autowired
 	public ConversationService(ConversationThreadRepository threadRepository,
@@ -58,9 +60,10 @@ public class ConversationService {
 			CommunicationAuditEventRepository auditRepository,
 			CommunicationOutboxEventRepository outboxRepository,
 			OrganisationCollaborationClient organisationClient,
-			SchedulingPatientContextClient patientContextClient,
+			CollaborationPatientContextService patientContextClient,
 			CommunicationEventMapper eventMapper, ApplicationEventPublisher eventPublisher,
-			Clock clock) {
+			CommunicationOutboxProperties outboxProperties,
+			Clock clock, com.sahha.communication.attachment.MessageAttachmentReferences attachments) {
 		this.threadRepository = threadRepository;
 		this.participantRepository = participantRepository;
 		this.messageRepository = messageRepository;
@@ -70,7 +73,9 @@ public class ConversationService {
 		this.patientContextClient = patientContextClient;
 		this.eventMapper = eventMapper;
 		this.eventPublisher = eventPublisher;
+		this.outboxProperties = outboxProperties;
 		this.clock = clock;
+        this.attachments = attachments;
 	}
 
 	/** Backwards-compatible constructor for unit tests that do not need realtime delivery. */
@@ -80,11 +85,14 @@ public class ConversationService {
 			CommunicationAuditEventRepository auditRepository,
 			CommunicationOutboxEventRepository outboxRepository,
 			OrganisationCollaborationClient organisationClient,
-			SchedulingPatientContextClient patientContextClient,
+			CollaborationPatientContextService patientContextClient,
 			CommunicationEventMapper eventMapper, Clock clock) {
 		this(threadRepository, participantRepository, messageRepository, auditRepository,
 				outboxRepository, organisationClient, patientContextClient, eventMapper,
-				event -> { }, clock);
+				event -> { }, new CommunicationOutboxProperties(
+						"sahha.communication.messages.v1",
+						"sahha.communication.referrals.v1", 50,
+						java.time.Duration.ofSeconds(5)), clock, null);
 	}
 
 	@Transactional
@@ -97,9 +105,12 @@ public class ConversationService {
 				organisationId, actorUserId, accessToken);
 		CollaborationDoctorResource recipient = organisationClient.resolve(
 				organisationId, request.recipientUserId(), accessToken);
+		if (request.sourceConsultationId() != null && request.patientRegistrationId() == null) {
+			throw new IllegalArgumentException("A consultation source requires patient context");
+		}
 		if (request.patientRegistrationId() != null) {
 			patientContextClient.requireMentionable(organisationId,
-					request.patientRegistrationId(), actorUserId, accessToken);
+					request.patientRegistrationId(), actorUserId, accessToken, request.sourceConsultationId());
 		}
 		ConversationThread existing = threadRepository
 				.findByOrganisationIdAndCreatedByUserIdAndCreationRequestId(
@@ -110,16 +121,17 @@ public class ConversationService {
 			boolean sameRecipient = existingParticipants.stream().anyMatch(value ->
 					request.recipientUserId().equals(value.getUserId()));
 			if (!sameRecipient || !existing.getSubject().equals(normalizeSubject(request.subject()))
-					|| !Objects.equals(existing.getPatientRegistrationId(), request.patientRegistrationId())) {
+					|| !Objects.equals(existing.getPatientRegistrationId(), request.patientRegistrationId())
+					|| !Objects.equals(existing.getSourceConsultationId(), request.sourceConsultationId())) {
 				throw new ConversationConflictException();
 			}
 			return response(existing, actorUserId, existingParticipants);
 		}
 
 		Instant now = clock.instant();
-		ConversationThread thread = ConversationThread.create(UUID.randomUUID(),
+		ConversationThread thread = ConversationThread.createWithSource(UUID.randomUUID(),
 				organisationId, request.conversationRequestId(), request.subject(),
-				request.patientRegistrationId(), actorUserId, actor.membershipId(), now);
+				request.patientRegistrationId(), actorUserId, actor.membershipId(), now, request.sourceConsultationId());
 		threadRepository.save(thread);
 		List<ConversationParticipant> participants = List.of(
 				ConversationParticipant.join(thread.getId(), organisationId,
@@ -130,7 +142,7 @@ public class ConversationService {
 		CommunicationAuditEvent audit = auditRepository.save(CommunicationAuditEvent.record(
 				organisationId, thread.getId(), null, actorUserId,
 				"CONVERSATION_CREATED", thread.getVersion(), now));
-		outboxRepository.save(CommunicationOutboxEvent.pending(audit,
+		outboxRepository.save(CommunicationOutboxEvent.pending(audit, outboxProperties.topic(),
 				"conversation.created.v1", eventMapper.conversationCreated(audit, thread,
 						participants.stream().map(ConversationParticipant::getUserId).toList())));
 		return response(thread, actorUserId, participants);
@@ -166,8 +178,10 @@ public class ConversationService {
 		Page<ConversationMessage> result = messageRepository
 				.findAllByConversationIdAndOrganisationIdOrderBySentAtDescIdDesc(
 						conversationId, organisationId, PageRequest.of(page, size));
-		return new MessagePageResponse(result.getContent().stream().map(ConversationService::response)
-				.toList(), result.getNumber(), result.getSize(), result.getTotalElements(),
+        var values=result.getContent().stream().map(this::response).toList();
+        if(attachments!=null && values.stream().anyMatch(value->!value.attachments().isEmpty()))
+            attachments.requireAccess(conversationId,organisationId,actorUserId,accessToken);
+		return new MessagePageResponse(values, result.getNumber(), result.getSize(), result.getTotalElements(),
 				result.getTotalPages());
 	}
 
@@ -187,15 +201,23 @@ public class ConversationService {
 				.findByConversationIdAndSenderUserIdAndMessageRequestId(
 						conversationId, actorUserId, request.messageRequestId()).orElse(null);
 		if (existing != null) {
-			if (!existing.getBody().equals(request.body().strip())) {
+            if(attachments!=null && !response(existing).attachments().isEmpty())
+                attachments.requireAccess(conversationId,organisationId,actorUserId,accessToken);
+			if (!existing.getBody().equals(request.body().strip())
+                    || !response(existing).attachments().stream().map(value->value.fileId()).sorted().toList()
+                        .equals(request.attachmentIds().stream().sorted().toList())) {
 				throw new ConversationConflictException();
 			}
 			return response(existing);
 		}
+        var selected=attachments==null ? java.util.List.<com.sahha.communication.attachment.MessageAttachmentResponse>of()
+                :attachments.validate(request.attachmentIds(),organisationId,conversationId,request.messageRequestId(),actorUserId,accessToken);
+        if(attachments==null && !request.attachmentIds().isEmpty()) throw new IllegalStateException("Attachment service is unavailable");
 		Instant now = clock.instant();
 		ConversationMessage message = messageRepository.save(ConversationMessage.send(
 				conversationId, organisationId, request.messageRequestId(), actorUserId,
 				actor.membershipId(), actor.displayName(), request.body(), now));
+        if(!selected.isEmpty()) { messageRepository.flush(); attachments.link(message,selected); }
 		thread.messageSent(now);
 		CommunicationAuditEvent audit = auditRepository.save(CommunicationAuditEvent.record(
 				organisationId, conversationId, message.getId(), actorUserId,
@@ -203,7 +225,7 @@ public class ConversationService {
 		List<UUID> recipients = activeParticipants.stream()
 				.map(ConversationParticipant::getUserId)
 				.filter(value -> !value.equals(actorUserId)).toList();
-		outboxRepository.save(CommunicationOutboxEvent.pending(audit,
+		outboxRepository.save(CommunicationOutboxEvent.pending(audit, outboxProperties.topic(),
 				"message.sent.v1", eventMapper.messageSent(audit, thread, message, recipients)));
 		eventPublisher.publishEvent(new CommunicationMessageCreatedEvent(
 				message.getId(), conversationId, organisationId, actorUserId,
@@ -254,10 +276,11 @@ public class ConversationService {
 								value.getDisplayNameSnapshot(), value.getJoinedAt(), value.getLastReadAt()))
 						.toList());
 	}
-	private static MessageResponse response(ConversationMessage value) {
+	private MessageResponse response(ConversationMessage value) {
 		return new MessageResponse(value.getId(), value.getConversationId(),
 				value.getSenderUserId(), value.getSenderDisplayNameSnapshot(),
-				value.getBody(), value.getSentAt());
+				value.getBody(), value.getSentAt(), attachments==null ? java.util.List.of()
+                    :attachments.list(value.getId(),value.getOrganisationId()));
 	}
 	private static void validatePage(int page, int size) {
 		if (page < 0 || size < 1 || size > 100) throw new IllegalArgumentException("invalid page");

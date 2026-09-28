@@ -34,6 +34,7 @@ export interface NotificationRealtimeCallbacks {
 }
 
 export interface NotificationRealtimeOptions {
+  patientRegistrationId?: string
   webSocketFactory?: WebSocketFactory
   baseReconnectDelayMs?: number
   maxReconnectDelayMs?: number
@@ -53,12 +54,17 @@ const NOTIFICATION_DESTINATION = '/user/queue/notifications'
 export const notificationWebSocketUrl = (
   apiBaseUrl = env.apiBaseUrl,
   origin = window.location.origin,
+  patientRegistrationId?: string,
 ) => {
   const url = new URL(apiBaseUrl, origin)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   url.pathname = `${url.pathname.replace(/\/$/, '')}/notifications/ws`
   url.search = ''
   url.hash = ''
+  if (patientRegistrationId) {
+    url.pathname = url.pathname.replace(/\/notifications\/ws$/, '/notifications/patient/ws')
+    url.searchParams.set('registrationId', patientRegistrationId)
+  }
   return url.toString()
 }
 
@@ -114,6 +120,7 @@ export class NotificationRealtimeClient {
   private readonly baseReconnectDelayMs: number
   private readonly maxReconnectDelayMs: number
   private readonly heartbeatMs: number
+  private readonly patientRegistrationId?: string
 
   constructor(
     private readonly callbacks: NotificationRealtimeCallbacks,
@@ -124,6 +131,7 @@ export class NotificationRealtimeClient {
     this.baseReconnectDelayMs = options.baseReconnectDelayMs ?? 1_000
     this.maxReconnectDelayMs = options.maxReconnectDelayMs ?? 30_000
     this.heartbeatMs = options.heartbeatMs ?? 10_000
+    this.patientRegistrationId = options.patientRegistrationId
   }
 
   start() {
@@ -156,7 +164,7 @@ export class NotificationRealtimeClient {
       const csrf = await httpClient.getCsrfToken()
       if (this.stopped || generation !== this.generation) return
       const socket = this.webSocketFactory(
-        notificationWebSocketUrl(),
+        notificationWebSocketUrl(undefined, undefined, this.patientRegistrationId),
         STOMP_PROTOCOLS,
       )
       this.socket = socket

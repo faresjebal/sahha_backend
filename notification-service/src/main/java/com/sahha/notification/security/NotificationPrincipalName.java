@@ -12,6 +12,8 @@ public final class NotificationPrincipalName {
 	}
 
 	public static String from(Jwt jwt) {
+		String organisation = jwt.getClaimAsString(NotificationAccessTokenValidator.ACTIVE_ORGANISATION_ID_CLAIM);
+		if (organisation == null || organisation.isBlank()) return "account__" + userId(jwt);
 		return of(userId(jwt), organisationId(jwt));
 	}
 
@@ -24,7 +26,11 @@ public final class NotificationPrincipalName {
 	}
 
 	public static UUID organisationId(Jwt jwt) {
-		return UUID.fromString(jwt.getClaimAsString(
-				NotificationAccessTokenValidator.ACTIVE_ORGANISATION_ID_CLAIM));
+		try {
+			return UUID.fromString(jwt.getClaimAsString(
+					NotificationAccessTokenValidator.ACTIVE_ORGANISATION_ID_CLAIM));
+		} catch (RuntimeException missing) {
+			throw new com.sahha.notification.exception.NotificationAccessDeniedException();
+		}
 	}
 }

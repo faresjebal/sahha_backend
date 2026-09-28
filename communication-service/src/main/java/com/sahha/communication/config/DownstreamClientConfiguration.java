@@ -9,8 +9,18 @@ import org.springframework.web.client.RestClient;
 
 @Configuration
 @EnableConfigurationProperties({OrganisationClientProperties.class,
-		SchedulingClientProperties.class})
+		SchedulingClientProperties.class, ClinicalClientProperties.class})
 public class DownstreamClientConfiguration {
+	@Bean
+	RestClient communicationClinicalRestClient(@LoadBalanced RestClient.Builder builder,
+			ClinicalClientProperties properties) {
+		var http = java.net.http.HttpClient.newBuilder()
+				.connectTimeout(java.time.Duration.ofSeconds(2))
+				.followRedirects(java.net.http.HttpClient.Redirect.NEVER).build();
+		var factory = new org.springframework.http.client.JdkClientHttpRequestFactory(http);
+		factory.setReadTimeout(java.time.Duration.ofSeconds(3));
+		return builder.clone().baseUrl(properties.baseUrl().toString()).requestFactory(factory).build();
+	}
 	@Bean
 	@Primary
 	RestClient.Builder communicationPlainRestClientBuilder() { return RestClient.builder(); }

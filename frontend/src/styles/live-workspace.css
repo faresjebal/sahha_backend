@@ -1,0 +1,31 @@
+/* Existing Sahha tokens and shell are retained; live-data cards need flexible content. */
+.workspace-switcher{display:grid;flex:none;gap:8px;padding:12px 8px;font-size:12px;color:var(--muted)}
+.workspace-switcher select{width:100%;min-width:0;min-height:44px;padding:8px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);color:var(--text);font:inherit}
+/* A retained page-entry transform otherwise makes fixed drawers page-bound and
+   lets the page's overflow clip the dialog. Release that containing block while
+   a modal is open, retaining the existing drawer, tokens and focus behaviour. */
+.workspace-v3 .page:has(.workflow-drawer),.soft-shell .page:has(.workflow-drawer){animation:none;transform:none;overflow:visible}
+.live-workspace-page .workflow-card{padding:24px;margin-block:20px;border:1px solid var(--line);background:var(--surface);border-radius:var(--radius);overflow-wrap:anywhere}
+.live-workspace-page .workflow-card h2{margin:0 0 14px;font-size:21px;display:flex;align-items:center;gap:10px}
+.live-workspace-page .workflow-card p{color:var(--muted);line-height:1.7}
+.live-workspace-page .workflow-card article+article{border-top:1px solid var(--line);margin-top:20px;padding-top:20px}
+.live-workspace-page dl{display:grid;grid-template-columns:minmax(90px,160px) minmax(0,1fr);gap:12px;margin:20px 0}
+.live-workspace-page dt{color:var(--muted)}.live-workspace-page dd{margin:0;overflow-wrap:anywhere}
+.live-workspace-page .doctor-card{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:24px}
+.live-workspace-page .doctor-card h2{margin:0;font-size:20px}.live-workspace-page .doctor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px;margin-block:24px}
+.live-workspace-page .search-field{height:auto;min-height:46px;flex-wrap:wrap;gap:12px;margin-block:16px}
+.live-workspace-page .search-field input,.live-workspace-page .search-field select{min-width:0;max-width:100%}
+.live-workspace-page .admin-metrics{margin-block:24px}.live-workspace-page .primary,.live-workspace-page .secondary{text-decoration:none}
+.live-workspace-page .workflow-card>.primary,.live-workspace-page .workflow-card>.secondary{display:inline-flex;margin:6px 12px 6px 0}
+.live-profile-form{padding:24px;display:grid;gap:18px}.live-profile-form label{display:grid;gap:8px;font-size:13px;color:var(--muted)}
+.live-profile-form input{width:100%;min-width:0;padding:12px;background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:var(--radius);font:inherit}
+.referral-composer{padding:20px;overflow-wrap:anywhere;min-width:0}.referral-composer .live-profile-form{padding:24px 0;min-width:0}
+.referral-composer select{width:100%;min-width:0;max-width:100%;padding:12px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);font:inherit}
+.referral-composer .referral-selections{min-width:0;display:grid;gap:16px;border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.referral-composer .referral-choice{display:flex;align-items:flex-start;gap:12px;line-height:1.6;color:var(--text)}
+.referral-composer .referral-choice input{width:18px;height:18px;flex:0 0 18px;margin-top:3px;padding:0;accent-color:var(--accent)}
+.referral-composer p{line-height:1.7}.referral-composer code{font-size:12px}.referral-composer .referral-detail{padding:0}
+.referral-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));gap:18px}.referral-list .workflow-card{margin-block:16px}
+.referral-list header,.referral-detail>header{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:18px;font-size:12px;color:var(--muted)}
+.referral-detail{padding:24px;overflow-wrap:anywhere}.referral-detail h3{margin-block:20px 12px}.referral-detail p,.referral-detail li{line-height:1.7}.referral-detail li{margin-block:12px}.referral-detail code{font-size:12px}.referral-text{white-space:pre-wrap}.referral-detail .live-profile-form{padding:20px 0}.live-profile-form textarea{min-height:110px;padding:12px;max-width:100%;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:var(--radius);font:inherit}
+@media(max-width:620px){.live-workspace-page .workflow-card{padding:18px}.live-workspace-page dl{grid-template-columns:1fr;gap:6px}.live-workspace-page dd{margin-bottom:12px}.live-workspace-page .admin-metrics{grid-template-columns:1fr}.live-profile-form{padding:18px}}

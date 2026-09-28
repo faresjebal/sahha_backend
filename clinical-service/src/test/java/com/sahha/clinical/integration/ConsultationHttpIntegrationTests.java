@@ -1,6 +1,9 @@
 package com.sahha.clinical.integration;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
+import com.sahha.clinical.client.organisation.OrganisationDoctorClient;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -52,6 +55,9 @@ class ConsultationHttpIntegrationTests {
 
 	@MockitoBean
 	private SchedulingClinicalContextClient schedulingClient;
+
+	@MockitoBean
+	private OrganisationDoctorClient doctors;
 
 	@Test
 	void owningDoctorCreatesRetrySafeDraftThenUpdatesWithVersionProtection()
@@ -118,6 +124,39 @@ class ConsultationHttpIntegrationTests {
 		org.junit.jupiter.api.Assertions.assertEquals(
 				2, outboxRepository.countByAggregateId(id));
 	}
+
+    @Test
+    void explicitlyAssignedAdministratorAndDoctorCanCreateTheirOwnConsultation() throws Exception {
+        Fixture fixture = fixture("IN_PROGRESS");
+        workspace(DOCTOR_TOKEN, fixture.organisationId(), fixture.doctorUserId(),
+                List.of("ORGANIZATION_ADMIN", "DOCTOR"));
+        when(schedulingClient.resolve(fixture.appointmentId(), DOCTOR_TOKEN)).thenReturn(fixture.context());
+        mockMvc.perform(post("/api/v1/consultations").cookie(access(DOCTOR_TOKEN), csrf())
+                .header("X-XSRF-TOKEN", "clinical-csrf-token").contentType(MediaType.APPLICATION_JSON)
+                .content(createRequest(fixture.appointmentId())))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.doctorUserId").value(fixture.doctorUserId().toString()));
+    }
+
+    @Test
+    void administrativeAndWrongScopeDoctorClaimsCannotUseForgedClinicalPermissions() throws Exception {
+        for (List<String> platform : List.of(List.<String>of(), List.of("DOCTOR"), List.of("PLATFORM_ADMIN"))) {
+            Jwt base = jwt(RECEPTIONIST_TOKEN, UUID.randomUUID(), UUID.randomUUID(), List.of("ORGANIZATION_ADMIN"));
+            Jwt forged = Jwt.withTokenValue(RECEPTIONIST_TOKEN).headers(h -> h.putAll(base.getHeaders()))
+                    .claims(claims -> {
+                        claims.putAll(base.getClaims());
+                        claims.put("roles", platform);
+                        claims.put("permissions", List.of("clinical:record:read:own", "clinical:draft:write:own"));
+                        claims.put("scope", "clinical:record:read:own clinical:draft:write:own");
+                    }).build();
+            when(jwtDecoder.decode(RECEPTIONIST_TOKEN)).thenReturn(forged);
+            mockMvc.perform(get("/api/v1/consultations/{id}/record", UUID.randomUUID())
+                    .cookie(access(RECEPTIONIST_TOKEN))).andExpect(status().isForbidden());
+            mockMvc.perform(post("/api/v1/consultations").cookie(access(RECEPTIONIST_TOKEN), csrf())
+                    .header("X-XSRF-TOKEN", "clinical-csrf-token").contentType(MediaType.APPLICATION_JSON)
+                    .content(createRequest(UUID.randomUUID()))).andExpect(status().isForbidden());
+        }
+        org.mockito.Mockito.verifyNoInteractions(schedulingClient, doctors);
+    }
 
 	@Test
 	void onlyOwningDoctorCanReadAndReceptionistCannotEnterClinicalApi()
@@ -273,13 +312,15 @@ class ConsultationHttpIntegrationTests {
 				.build();
 	}
 
-	private static Fixture fixture(String status) {
+	private Fixture fixture(String status) {
 		UUID organisationId = UUID.randomUUID();
 		UUID appointmentId = UUID.randomUUID();
 		UUID patientRegistrationId = UUID.randomUUID();
 		UUID patientId = UUID.randomUUID();
 		UUID doctorUserId = UUID.randomUUID();
 		UUID doctorMembershipId = UUID.randomUUID();
+		when(doctors.requireCurrentMembership(eq(organisationId), eq(doctorUserId),
+				eq(DOCTOR_TOKEN), anyString())).thenReturn(doctorMembershipId);
 		return new Fixture(
 				organisationId, appointmentId, patientRegistrationId, patientId,
 				doctorUserId, doctorMembershipId, status);

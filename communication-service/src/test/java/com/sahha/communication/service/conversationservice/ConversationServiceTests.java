@@ -58,13 +58,14 @@ class ConversationServiceTests {
 	@Mock CommunicationOutboxEventRepository outboxRepository;
 	@Mock OrganisationCollaborationClient organisationClient;
 	@Mock SchedulingPatientContextClient patientContextClient;
+	@Mock com.sahha.communication.client.clinical.ClinicalCollaborationSourceClient clinicalSourceClient;
 	private ConversationService service;
 
 	@BeforeEach
 	void setUp() {
 		service = new ConversationService(threadRepository, participantRepository,
 				messageRepository, auditRepository, outboxRepository,
-				organisationClient, patientContextClient, new CommunicationEventMapper(),
+				organisationClient, new CollaborationPatientContextService(patientContextClient, clinicalSourceClient), new CommunicationEventMapper(),
 				Clock.fixed(NOW, ZoneOffset.UTC));
 		lenient().when(auditRepository.save(any())).thenAnswer(call -> call.getArgument(0));
 	}

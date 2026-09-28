@@ -1,5 +1,7 @@
 package com.sahha.auth.config;
 
+import com.sahha.auth.security.AuthPermissions;
+
 import tools.jackson.databind.ObjectMapper;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -75,10 +77,12 @@ public class AuthHttpSecurityConfiguration {
 								"/api/v1/auth/login",
 								"/api/v1/auth/refresh")
 						.permitAll()
-						.requestMatchers("/api/v1/auth/platform/**")
-						.hasRole("PLATFORM_ADMIN")
+						.requestMatchers(HttpMethod.GET, "/api/v1/auth/platform/**")
+                        .hasAuthority(AuthPermissions.ACCOUNT_READ)
+                        .requestMatchers("/api/v1/auth/platform/**")
+                        .hasAuthority(AuthPermissions.ACCOUNT_STATUS_WRITE)
 						.anyRequest()
-						.authenticated())
+                        .hasAuthority(AuthPermissions.SELF_SERVICE))
 				.csrf(csrf -> csrf
 						.spa()
 						.csrfTokenRepository(csrfTokenRepository))

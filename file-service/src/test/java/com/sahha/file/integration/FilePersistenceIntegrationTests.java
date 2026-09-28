@@ -51,7 +51,7 @@ class FilePersistenceIntegrationTests {
 
 	@Test
 	void migrationAndHibernateModelPreservePrivateFileLifecycle() {
-		assertEquals("2", flyway.info().current().getVersion().getVersion());
+        assertEquals("5", flyway.info().current().getVersion().getVersion());
 		assertEquals(4, jdbcTemplate.queryForObject("""
 				select count(*)
 				from information_schema.tables

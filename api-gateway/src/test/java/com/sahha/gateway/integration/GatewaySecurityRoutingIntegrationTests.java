@@ -493,6 +493,17 @@ class GatewaySecurityRoutingIntegrationTests {
 	}
 
 	@Test
+	void referralSourceDiscoveryRequiresAuthenticationAndUsesTheClinicalRoute() {
+		webTestClient.get().uri("/api/v1/consultations/referral-sources?page=1&size=20")
+				.exchange().expectStatus().isUnauthorized();
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(validJwt(USER_TOKEN, List.of("DOCTOR"))));
+		webTestClient.get().uri("/api/v1/consultations/referral-sources?page=1&size=20")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN).exchange().expectStatus().isOk();
+		org.junit.jupiter.api.Assertions.assertEquals("/api/v1/consultations/referral-sources", LAST_UPSTREAM_PATH.get());
+		org.junit.jupiter.api.Assertions.assertEquals(List.of("SAHHA_ACCESS_TOKEN=" + USER_TOKEN), UPSTREAM_COOKIES);
+	}
+
+	@Test
 	void authenticatedConversationRouteIsForwardedToCommunicationService()
 			throws Exception {
 		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
@@ -506,6 +517,24 @@ class GatewaySecurityRoutingIntegrationTests {
 
 		org.junit.jupiter.api.Assertions.assertEquals(
 				"/api/v1/conversations", LAST_UPSTREAM_PATH.get());
+		org.junit.jupiter.api.Assertions.assertEquals(
+				List.of("SAHHA_ACCESS_TOKEN=" + USER_TOKEN), UPSTREAM_COOKIES);
+	}
+
+	@Test
+	void authenticatedReferralRouteIsForwardedToCommunicationService()
+			throws Exception {
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(
+				validJwt(USER_TOKEN, List.of("DOCTOR"))));
+
+		webTestClient.get()
+				.uri("/api/v1/referrals")
+				.cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN)
+				.exchange()
+				.expectStatus().isOk();
+
+		org.junit.jupiter.api.Assertions.assertEquals(
+				"/api/v1/referrals", LAST_UPSTREAM_PATH.get());
 		org.junit.jupiter.api.Assertions.assertEquals(
 				List.of("SAHHA_ACCESS_TOKEN=" + USER_TOKEN), UPSTREAM_COOKIES);
 	}
@@ -648,6 +677,23 @@ class GatewaySecurityRoutingIntegrationTests {
 	private static Jwt validJwt(String tokenValue) {
 		return validJwt(tokenValue, List.of("PLATFORM_ADMIN"));
 	}
+
+    @Test
+    void organisationScopedPlatformRoleAndPermissionClaimsCannotCrossThePlatformBoundary() {
+        Jwt base = validJwt(USER_TOKEN, List.of());
+        Jwt forged = Jwt.withTokenValue(USER_TOKEN).headers(h -> h.putAll(base.getHeaders()))
+                .claims(claims -> {
+                    claims.putAll(base.getClaims());
+                    claims.put("org_id", UUID.randomUUID().toString());
+                    claims.put("org_roles", List.of("PLATFORM_ADMIN", "ORGANIZATION_ADMIN"));
+                    claims.put("permissions", List.of("gateway:platform:route"));
+                    claims.put("scope", "gateway:platform:route");
+                }).build();
+        when(jwtDecoder.decode(USER_TOKEN)).thenReturn(Mono.just(forged));
+        webTestClient.get().uri("/api/v1/platform/organisations")
+                .cookie("SAHHA_ACCESS_TOKEN", USER_TOKEN).exchange().expectStatus().isForbidden();
+        org.junit.jupiter.api.Assertions.assertEquals(0, UPSTREAM_REQUESTS.get());
+    }
 
 	private static Jwt validJwt(
 			String tokenValue,

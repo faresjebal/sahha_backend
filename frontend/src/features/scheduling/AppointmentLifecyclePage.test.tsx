@@ -37,7 +37,7 @@ vi.mock('../../services/api/patientRegistryRestService', () => ({
 }))
 vi.mock('../../app/auth/AuthProvider', () => ({
   useAuth:() => ({
-    session:{ user:{ organizationId:'organisation-1' } },
+    session:{ user:{ id:'doctor-12345678', organizationId:'organisation-1' } },
   }),
 }))
 
@@ -64,7 +64,7 @@ const requested: AppointmentResource = {
   version:0,
 }
 
-const renderPage = (scope: 'doctor' | 'reception') => {
+const renderPage = (scope: 'doctor' | 'reception', checkInOnly = false) => {
   const queryClient = new QueryClient({
     defaultOptions:{ queries:{ retry:false }, mutations:{ retry:false } },
   })
@@ -72,7 +72,7 @@ const renderPage = (scope: 'doctor' | 'reception') => {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/doctor/appointments']}>
         <Routes>
-          <Route path="/doctor/appointments" element={<AppointmentLifecyclePage scope={scope}/>}/>
+          <Route path="/doctor/appointments" element={<AppointmentLifecyclePage scope={scope} checkInOnly={checkInOnly}/>}/>
           <Route path="/doctor/clinical/:consultationId" element={<p>Clinical consultation opened</p>}/>
         </Routes>
       </MemoryRouter>
@@ -81,6 +81,35 @@ const renderPage = (scope: 'doctor' | 'reception') => {
 }
 
 describe('Real appointment lifecycle page', () => {
+  it.each(['doctor', 'reception'] as const)('scopes an organisation-wide response for the %s workspace', async scope => {
+    appointmentService.list.mockResolvedValue([requested, { ...requested, id:'other-appointment', doctorUserId:'another-doctor', locationLabel:'Other doctor room' }])
+    renderPage(scope)
+    await screen.findAllByText('Synthetic room')
+    expect(screen.queryByText('Other doctor room') !== null).toBe(scope === 'reception')
+    expect(screen.getAllByRole('button', { name:'Manage' })).toHaveLength(scope === 'doctor' ? 1 : 2)
+  })
+  it('uses a single-day live check-in queue with persisted transitions, not sample arrivals', async () => {
+    const confirmed = { ...requested, status:'CONFIRMED' }
+    appointmentService.list.mockResolvedValue([requested, { ...confirmed, id:'eligible-appointment' }])
+    appointmentService.checkIn.mockImplementation(async () => {
+      const checked = { ...confirmed, id:'eligible-appointment', status:'CHECKED_IN', version:1 }
+      appointmentService.list.mockResolvedValue([checked])
+      return checked
+    })
+    renderPage('reception', true)
+    expect(await screen.findByRole('heading', { name:'Check-in queue.' })).toBeInTheDocument()
+    await screen.findByRole('button', { name:'Manage' })
+    const [from,to] = appointmentService.list.mock.calls[0]
+    expect(new Date(to).getTime()-new Date(from).getTime()).toBe(86400000)
+    expect(screen.queryByText('Nora Bennett')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name:'Upcoming' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name:'Manage' }))
+    fireEvent.click(screen.getByRole('button', { name:'Check in patient' }))
+    await waitFor(() => expect(appointmentService.checkIn).toHaveBeenCalledWith('eligible-appointment', expect.objectContaining({ version:0 })))
+    expect(await screen.findByText('1 waiting')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Queue date'), { target:{ value:'2030-01-15' } })
+    await waitFor(() => expect(appointmentService.list).toHaveBeenCalledWith(new Date('2030-01-15T00:00:00').toISOString(), new Date('2030-01-16T00:00:00').toISOString()))
+  })
   afterEach(() => cleanup())
 
   beforeEach(() => {

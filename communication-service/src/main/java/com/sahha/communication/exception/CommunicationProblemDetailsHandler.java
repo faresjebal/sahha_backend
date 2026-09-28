@@ -18,6 +18,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import com.sahha.communication.config.RequestIdFilter;
 
@@ -41,6 +42,7 @@ public class CommunicationProblemDetailsHandler {
 	}
 
 	@ExceptionHandler({HttpMessageNotReadableException.class,
+			org.springframework.web.bind.MissingServletRequestParameterException.class,
 			MethodArgumentTypeMismatchException.class, IllegalArgumentException.class})
 	ResponseEntity<ProblemDetail> invalid(Exception exception, HttpServletRequest request) {
 		return response(HttpStatus.BAD_REQUEST, problem(HttpStatus.BAD_REQUEST,
@@ -54,6 +56,15 @@ public class CommunicationProblemDetailsHandler {
 		return response(HttpStatus.NOT_FOUND, problem(HttpStatus.NOT_FOUND,
 				"Conversation not found", "The requested conversation or eligible participant was not found.",
 				"urn:sahha:problem:conversation-not-found", request));
+	}
+
+	@ExceptionHandler(ReferralNotFoundException.class)
+	ResponseEntity<ProblemDetail> referralNotFound(ReferralNotFoundException exception,
+			HttpServletRequest request) {
+		return response(HttpStatus.NOT_FOUND, problem(HttpStatus.NOT_FOUND,
+				"Referral not found",
+				"The requested referral or eligible participant was not found.",
+				"urn:sahha:problem:referral-not-found", request));
 	}
 
 	@ExceptionHandler(CommunicationAccessDeniedException.class)
@@ -72,6 +83,17 @@ public class CommunicationProblemDetailsHandler {
 				"Communication request conflict",
 				"The request identifier was already used with different content.",
 				"urn:sahha:problem:communication-request-conflict", request));
+	}
+
+	@ExceptionHandler({ReferralStateConflictException.class,
+			ReferralVersionConflictException.class,
+			ObjectOptimisticLockingFailureException.class})
+	ResponseEntity<ProblemDetail> referralConflict(Exception exception,
+			HttpServletRequest request) {
+		return response(HttpStatus.CONFLICT, problem(HttpStatus.CONFLICT,
+				"Referral state conflict",
+				"The referral changed or this status transition is not allowed.",
+				"urn:sahha:problem:referral-state-conflict", request));
 	}
 
 	@ExceptionHandler(CommunicationContextUnavailableException.class)

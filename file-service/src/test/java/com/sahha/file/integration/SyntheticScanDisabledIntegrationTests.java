@@ -8,6 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 
 import com.sahha.file.controller.SyntheticFileScanController;
+import com.sahha.file.attachment.SyntheticMessageAttachmentScanController;
 
 @SpringBootTest(properties =
 		"sahha.file.storage.synthetic-clean-enabled=false")
@@ -20,6 +21,9 @@ class SyntheticScanDisabledIntegrationTests {
 	void productionDefaultDoesNotExposeTheSyntheticScanController() {
 		assertTrue(applicationContext
 				.getBeansOfType(SyntheticFileScanController.class)
+				.isEmpty());
+		assertTrue(applicationContext
+				.getBeansOfType(SyntheticMessageAttachmentScanController.class)
 				.isEmpty());
 	}
 }

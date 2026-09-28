@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sahha.clinical.config.RequestIdFilter;
@@ -29,11 +30,14 @@ import com.sahha.clinical.dto.request.ReplaceConsultationDraftRequest;
 import com.sahha.clinical.dto.request.UpdateConsultationDraftRequest;
 import com.sahha.clinical.dto.response.ClinicalRecordResponse;
 import com.sahha.clinical.dto.response.ConsultationResponse;
+import com.sahha.clinical.dto.response.ReferralSourcePageResponse;
 import com.sahha.clinical.exception.ClinicalAccessDeniedException;
 import com.sahha.clinical.security.ClinicalAccessTokenValidator;
 import com.sahha.clinical.service.consultationservice.ConsultationCreationResult;
 import com.sahha.clinical.service.consultationservice.ConsultationService;
 import com.sahha.clinical.service.consultationservice.ClinicalRecordService;
+import com.sahha.clinical.service.consultationservice.ReferralSourceService;
+import com.sahha.clinical.service.consultationservice.ConsultationAuthorAccessService;
 
 @RestController
 @RequestMapping("/api/v1/consultations")
@@ -43,12 +47,29 @@ public class ConsultationController {
 
 	private final ConsultationService consultationService;
 	private final ClinicalRecordService clinicalRecordService;
+	private final ReferralSourceService referralSources;
+	private final ConsultationAuthorAccessService authorAccess;
 
 	public ConsultationController(
 			ConsultationService consultationService,
-			ClinicalRecordService clinicalRecordService) {
+			ClinicalRecordService clinicalRecordService,
+			ReferralSourceService referralSources,
+			ConsultationAuthorAccessService authorAccess) {
 		this.consultationService = consultationService;
 		this.clinicalRecordService = clinicalRecordService;
+		this.referralSources = referralSources;
+		this.authorAccess = authorAccess;
+	}
+
+	@GetMapping("/referral-sources")
+	@Operation(operationId = "listOwnedReferralSources",
+			summary = "List finalised sources authored under the caller's live doctor membership")
+	public ResponseEntity<ReferralSourcePageResponse> referralSources(
+			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+			@AuthenticationPrincipal Jwt jwt, HttpServletRequest request) {
+		return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(referralSources.list(
+				activeOrganisationId(jwt), actorUserId(jwt), jwt.getTokenValue(),
+				RequestIdFilter.requestId(request), page, size));
 	}
 
 	@GetMapping("/{consultationId}/record")
@@ -58,6 +79,7 @@ public class ConsultationController {
 			@PathVariable UUID consultationId,
 			@AuthenticationPrincipal Jwt jwt,
 			HttpServletRequest httpRequest) {
+		requireCurrentAuthor(consultationId, jwt, httpRequest);
 		return ResponseEntity.ok()
 				.cacheControl(CacheControl.noStore())
 				.body(clinicalRecordService.find(
@@ -74,6 +96,7 @@ public class ConsultationController {
 			@Valid @RequestBody ReplaceConsultationDraftRequest request,
 			@AuthenticationPrincipal Jwt jwt,
 			HttpServletRequest httpRequest) {
+		requireCurrentAuthor(consultationId, jwt, httpRequest);
 		return ResponseEntity.ok()
 				.cacheControl(CacheControl.noStore())
 				.body(clinicalRecordService.replaceDraft(
@@ -90,6 +113,7 @@ public class ConsultationController {
 			@Valid @RequestBody FinalizeConsultationRequest request,
 			@AuthenticationPrincipal Jwt jwt,
 			HttpServletRequest httpRequest) {
+		requireCurrentAuthor(consultationId, jwt, httpRequest);
 		return ResponseEntity.ok()
 				.cacheControl(CacheControl.noStore())
 				.body(clinicalRecordService.finalizeRecord(
@@ -106,6 +130,7 @@ public class ConsultationController {
 			@Valid @RequestBody CreateClinicalCorrectionRequest request,
 			@AuthenticationPrincipal Jwt jwt,
 			HttpServletRequest httpRequest) {
+		requireCurrentAuthor(consultationId, jwt, httpRequest);
 		return ResponseEntity.ok()
 				.cacheControl(CacheControl.noStore())
 				.body(clinicalRecordService.correct(
@@ -140,7 +165,8 @@ public class ConsultationController {
 			summary = "Read one consultation owned by the authenticated doctor")
 	public ResponseEntity<ConsultationResponse> find(
 			@PathVariable UUID consultationId,
-			@AuthenticationPrincipal Jwt jwt) {
+			@AuthenticationPrincipal Jwt jwt, HttpServletRequest httpRequest) {
+		requireCurrentAuthor(consultationId, jwt, httpRequest);
 		return ResponseEntity.ok()
 				.cacheControl(CacheControl.noStore())
 				.body(consultationService.find(
@@ -156,11 +182,17 @@ public class ConsultationController {
 			@Valid @RequestBody UpdateConsultationDraftRequest request,
 			@AuthenticationPrincipal Jwt jwt,
 			HttpServletRequest httpRequest) {
+		requireCurrentAuthor(consultationId, jwt, httpRequest);
 		return ResponseEntity.ok()
 				.cacheControl(CacheControl.noStore())
 				.body(consultationService.updateDraft(
 						activeOrganisationId(jwt), actorUserId(jwt), consultationId,
 						request, RequestIdFilter.requestId(httpRequest)));
+	}
+
+	private void requireCurrentAuthor(UUID consultationId, Jwt jwt, HttpServletRequest request) {
+		authorAccess.require(activeOrganisationId(jwt), actorUserId(jwt), consultationId,
+				jwt.getTokenValue(), RequestIdFilter.requestId(request));
 	}
 
 	private static UUID actorUserId(Jwt jwt) {

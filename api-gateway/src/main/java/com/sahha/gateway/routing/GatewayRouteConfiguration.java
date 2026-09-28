@@ -50,13 +50,15 @@ public class GatewayRouteConfiguration {
 						.path("/api/v1/conversations/ws")
 						.uri("lb:ws://communication-service"))
 				.route("communication-service", route -> route
-						.path("/api/v1/conversations/**", "/api/v1/conversations")
+						.path("/api/v1/conversations/**", "/api/v1/conversations",
+								"/api/v1/referrals/**", "/api/v1/referrals",
+								"/api/v1/sharing/**")
 						.uri("lb://communication-service"))
 				.route("file-service", route -> route
 						.path("/api/v1/files/**", "/api/v1/files")
 						.uri("lb://file-service"))
 				.route("notification-websocket", route -> route
-						.path("/api/v1/notifications/ws")
+						.path("/api/v1/notifications/ws", "/api/v1/notifications/patient/ws")
 						.uri("lb:ws://notification-service"))
 				.route("notification-service", route -> route
 						.path(

@@ -10,5 +10,10 @@ public record CreateConversationRequest(
 		@NotNull UUID conversationRequestId,
 		@NotNull UUID recipientUserId,
 		@NotBlank @Size(min = 4, max = 160) String subject,
-		UUID patientRegistrationId) {
+		UUID patientRegistrationId,
+		UUID sourceConsultationId) {
+	public CreateConversationRequest(UUID conversationRequestId, UUID recipientUserId,
+			String subject, UUID patientRegistrationId) {
+		this(conversationRequestId, recipientUserId, subject, patientRegistrationId, null);
+	}
 }

@@ -37,6 +37,7 @@ import {
   type ClinicalFormValues,
 } from './clinicalForm'
 import { MedicalFilePanel } from './MedicalFilePanel'
+import { doctorAppointments } from '../scheduling/doctorAppointments'
 
 type SavePhase = 'saved' | 'pending' | 'saving' | 'invalid' | 'error'
 
@@ -93,6 +94,7 @@ function ClinicalWorkQueue() {
   const rangeRef = useRef(windowRange())
   const appointmentsQuery = useQuery({
     queryKey:['clinical-appointment-queue', organisationId],
+    select:appointments => doctorAppointments(appointments, auth.session?.user.id),
     queryFn:() => appointmentRestService.list(
       rangeRef.current.from,
       rangeRef.current.to,

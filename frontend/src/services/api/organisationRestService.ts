@@ -10,6 +10,12 @@ import type {
 import { httpClient } from './httpClient'
 
 export const organisationRestService = {
+  currentProfile() {
+    return httpClient.request<OrganisationResource>('/organisations/current/profile')
+  },
+  updateCurrentProfile(command: Pick<OrganisationResource, 'name'|'contactEmail'|'phoneNumber'|'address'|'city'|'region'|'postalCode'|'countryCode'|'version'>) {
+    return httpClient.request<OrganisationResource>('/organisations/current/profile', { method:'PUT', body:command })
+  },
   listMyContexts() {
     return httpClient.request<OrganisationContextResource[]>(
       '/organisations/memberships',

@@ -33,7 +33,11 @@ public class FileDownloadGrant {
 	private UUID organisationId;
 
 	@Column(name = "actor_user_id", nullable = false, updatable = false)
-	private UUID actorUserId;
+    private UUID actorUserId;
+
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "access_scope", nullable = false, length = 24, updatable = false)
+    private DownloadAccessScope accessScope;
 
 	@Column(name = "token_digest", nullable = false, length = 64, updatable = false)
 	private String tokenDigest;
@@ -61,7 +65,13 @@ public class FileDownloadGrant {
 			String requestId,
 			Instant issuedAt,
 			Instant expiresAt) {
-		MedicalFile requiredFile = Objects.requireNonNull(file);
+        return issue(file, actorUserId, tokenDigest, requestId, issuedAt, expiresAt, DownloadAccessScope.OWN);
+    }
+
+    public static FileDownloadGrant issue(MedicalFile file, UUID actorUserId, String tokenDigest,
+            String requestId, Instant issuedAt, Instant expiresAt, DownloadAccessScope scope) {
+        if (scope == null || scope == DownloadAccessScope.LEGACY) throw new IllegalArgumentException("invalid grant scope");
+        MedicalFile requiredFile = Objects.requireNonNull(file);
 		if (!requiredFile.isAvailable()) {
 			throw new IllegalStateException("file is not available");
 		}
@@ -74,7 +84,8 @@ public class FileDownloadGrant {
 		grant.id = UUID.randomUUID();
 		grant.medicalFileId = requiredFile.getId();
 		grant.organisationId = requiredFile.getOrganisationId();
-		grant.actorUserId = Objects.requireNonNull(actorUserId);
+        grant.actorUserId = Objects.requireNonNull(actorUserId);
+        grant.accessScope = scope;
 		grant.tokenDigest = required(tokenDigest, 64, "tokenDigest");
 		grant.requestId = required(requestId, 128, "requestId");
 		grant.issuedAt = requiredIssuedAt;

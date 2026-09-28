@@ -63,6 +63,8 @@ class RedisSessionCacheIntegrationTests {
 	static void redisProperties(DynamicPropertyRegistry registry) {
 		registry.add("spring.data.redis.host", () -> REDIS_HOST);
 		registry.add("spring.data.redis.port", () -> REDIS_PORT);
+		registry.add("spring.data.redis.password",
+				() -> environment("AUTH_TEST_REDIS_PASSWORD", ""));
 	}
 
 	@Autowired

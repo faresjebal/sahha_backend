@@ -1,5 +1,7 @@
 package com.sahha.notification.config;
 
+import com.sahha.notification.security.NotificationPermissions;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
@@ -25,10 +27,10 @@ public class NotificationWebSocketSecurityConfiguration {
 	AuthorizationManager<Message<?>> notificationMessageAuthorizationManager(
 			MessageMatcherDelegatingAuthorizationManager.Builder messages) {
 		messages
-				.nullDestMatcher().authenticated()
+				.nullDestMatcher().hasAuthority(NotificationPermissions.STREAM_SELF)
 				.simpSubscribeDestMatchers(
 						NotificationWebSocketConfiguration.USER_DESTINATION)
-				.authenticated()
+				.hasAuthority(NotificationPermissions.STREAM_SELF)
 				.simpTypeMatchers(MESSAGE, SUBSCRIBE).denyAll()
 				.anyMessage().denyAll();
 		return messages.build();

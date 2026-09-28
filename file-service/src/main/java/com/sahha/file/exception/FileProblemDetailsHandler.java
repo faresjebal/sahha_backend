@@ -122,6 +122,7 @@ public class FileProblemDetailsHandler {
 
 	@ExceptionHandler({
 		ClinicalContextUnavailableException.class,
+		SharingContextUnavailableException.class,
 		FileStorageUnavailableException.class
 	})
 	ResponseEntity<ProblemDetail> unavailable(

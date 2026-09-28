@@ -22,6 +22,7 @@ import { appointmentRestService } from '../../services/api/appointmentRestServic
 import { availabilityRestService } from '../../services/api/availabilityRestService'
 import { consultationRestService } from '../../services/api/consultationRestService'
 import { AvailableSlotBrowser } from './AvailableSlotBrowser'
+import { doctorAppointments } from './doctorAppointments'
 
 type Scope = 'doctor' | 'reception'
 type AppointmentRangeView = 'upcoming' | 'history'
@@ -99,16 +100,25 @@ const statusLabel = (status: AppointmentStatus) =>
   status.replaceAll('_', ' ').toLowerCase().replace(/^./, value =>
     value.toUpperCase())
 
-export function AppointmentLifecyclePage({ scope }: { scope: Scope }) {
+export function AppointmentLifecyclePage({ scope, checkInOnly = false }: { scope: Scope; checkInOnly?:boolean }) {
   const auth = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const organisationId = auth.session?.user.organizationId || 'none'
   const [rangeView, setRangeView] = useState<AppointmentRangeView>('upcoming')
   const [rangeAnchor, setRangeAnchor] = useState(() => Date.now())
+  const [queueDate, setQueueDate] = useState(() => {
+    const date = new Date()
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
+  })
   const range = useMemo(
-    () => appointmentRange(rangeAnchor, rangeView),
-    [rangeAnchor, rangeView],
+    () => {
+      if (!checkInOnly) return appointmentRange(rangeAnchor, rangeView)
+      const from = new Date(`${queueDate}T00:00:00`)
+      const to = new Date(from); to.setDate(to.getDate()+1)
+      return { from:from.toISOString(), to:to.toISOString() }
+    },
+    [rangeAnchor, rangeView, checkInOnly, queueDate],
   )
   const [selected, setSelected] = useState<AppointmentResource | null>(null)
   const [action, setAction] = useState<LifecycleAction>('reschedule')
@@ -122,7 +132,9 @@ export function AppointmentLifecyclePage({ scope }: { scope: Scope }) {
   const appointmentsQuery = useQuery({
     queryKey:appointmentsKey,
     queryFn:() => appointmentRestService.list(range.from, range.to),
+    select:appointments => scope === 'doctor' ? doctorAppointments(appointments, auth.session?.user.id) : appointments,
     enabled:organisationId !== 'none',
+    refetchInterval:checkInOnly ? 15_000 : false,
   })
 
   const slotsQuery = useQuery({
@@ -201,6 +213,7 @@ export function AppointmentLifecyclePage({ scope }: { scope: Scope }) {
         : appointmentRestService.cancel(appointment.id, reasonedCommand)
     },
     onSuccess:(appointment, variables) => {
+      void queryClient.invalidateQueries({ queryKey:['appointments', organisationId], refetchType:'inactive' })
       queryClient.setQueryData<AppointmentResource[]>(
         appointmentsKey,
         current => current?.map(value =>
@@ -243,7 +256,7 @@ export function AppointmentLifecyclePage({ scope }: { scope: Scope }) {
     })
   }
 
-  const appointments = appointmentsQuery.data || []
+  const appointments = (appointmentsQuery.data || []).filter(item => !checkInOnly || ['CONFIRMED','CHECKED_IN'].includes(item.status))
   const waitingAppointments = appointments.filter(
     appointment => appointment.status === 'CHECKED_IN',
   )
@@ -266,7 +279,7 @@ export function AppointmentLifecyclePage({ scope }: { scope: Scope }) {
     <header className="appointment-lifecycle-heading">
       <div>
         <p className="eyebrow">{scope === 'doctor' ? 'Clinical schedule' : 'Patient services'} · Live Scheduling Service</p>
-        <h1>Appointments with accountable states.</h1>
+        <h1>{checkInOnly ? 'Check-in queue.' : 'Appointments with accountable states.'}</h1>
         <p>{scope === 'doctor'
           ? 'Confirm requests, respond to checked-in patients, and close each visit through an accountable state transition.'
           : 'Book available slots, check patients in, and maintain a non-clinical waiting list without receiving clinical authority.'}</p>
@@ -274,11 +287,12 @@ export function AppointmentLifecyclePage({ scope }: { scope: Scope }) {
       <ShieldCheck/>
     </header>
 
-    {scope === 'reception'&&<AvailableSlotBrowser/>}
+    {scope === 'reception'&&!checkInOnly&&<AvailableSlotBrowser/>}
+    {checkInOnly&&<label className="search-field">Queue date<input aria-label="Queue date" type="date" required value={queueDate} onChange={event=>{if(event.target.value){setQueueDate(event.target.value);setSelected(null)}}}/></label>}
     {notice&&<div className="inline-success" role="status"><Check/>{notice}</div>}
     {consultationMutation.isError&&<p className="form-message form-message--error" role="alert">{apiErrorMessage(consultationMutation.error, 'The appointment is in progress, but its consultation could not be opened. Use Open consultation to retry safely.')}</p>}
 
-    <section className="appointment-range-toolbar" aria-labelledby="appointment-range-title">
+    {!checkInOnly&&<section className="appointment-range-toolbar" aria-labelledby="appointment-range-title">
       <div>
         <p className="eyebrow">Schedule window</p>
         <h2 id="appointment-range-title">
@@ -302,7 +316,7 @@ export function AppointmentLifecyclePage({ scope }: { scope: Scope }) {
           onClick={() => changeRange('history')}
         ><History/>History</button>
       </div>
-    </section>
+    </section>}
 
     {appointmentsQuery.isPending&&<div className="appointment-lifecycle-state"><LoaderCircle className="spin"/>Loading appointments…</div>}
     {appointmentsQuery.isError&&<div className="appointment-lifecycle-state"><p>{apiErrorMessage(appointmentsQuery.error, 'Appointments could not be loaded.')}</p><button className="secondary" onClick={()=>appointmentsQuery.refetch()}><RefreshCw/>Retry</button></div>}
@@ -339,7 +353,7 @@ export function AppointmentLifecyclePage({ scope }: { scope: Scope }) {
           >{canOpenConsultation?'Open consultation':available.length?'Manage':'Closed'}</button>
         </article>
       })}
-      {!appointments.length&&<div className="appointment-lifecycle-state"><CalendarDays/><strong>No appointments in this range</strong><span>{rangeView === 'history'?'No appointments were recorded during the previous 31 days.':scope === 'reception'?'Book a published slot above to create the first request.':'New requests will appear after reception books an available slot.'}</span></div>}
+      {!appointments.length&&<div className="appointment-lifecycle-state"><CalendarDays/><strong>No appointments in this range</strong><span>{checkInOnly?'Confirmed appointments and checked-in patients for the selected day appear here.':rangeView === 'history'?'No appointments were recorded during the previous 31 days.':scope === 'reception'?'Book a published slot above to create the first request.':'New requests will appear after reception books an available slot.'}</span></div>}
     </section>}
 
     {selected&&<div className="appointment-command-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setSelected(null)}}>

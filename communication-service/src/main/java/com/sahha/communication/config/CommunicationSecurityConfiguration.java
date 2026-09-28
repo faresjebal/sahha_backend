@@ -1,5 +1,13 @@
 package com.sahha.communication.config;
 
+import org.springframework.http.HttpMethod;
+import com.sahha.communication.security.CommunicationPermissions;
+
+import java.net.URI;
+import org.springframework.beans.factory.annotation.Value;
+import com.sahha.session.SessionAuthorityClient;
+import com.sahha.session.SessionCheckingJwtDecoder;
+
 import java.time.Clock;
 import java.util.List;
 
@@ -38,7 +46,8 @@ public class CommunicationSecurityConfiguration {
 	Clock communicationClock() { return Clock.systemUTC(); }
 
 	@Bean
-	JwtDecoder communicationJwtDecoder(CommunicationSecurityProperties properties) {
+	JwtDecoder communicationJwtDecoder(
+			CommunicationSecurityProperties properties, SessionAuthorityClient sessionAuthority) {
 		NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(
 				properties.jwkSetUri().toString()).jwsAlgorithm(SignatureAlgorithm.RS256).build();
 		OAuth2TokenValidator<Jwt> issuer = JwtValidators.createDefaultWithIssuer(properties.issuer());
@@ -48,7 +57,14 @@ public class CommunicationSecurityConfiguration {
 						new OAuth2Error("invalid_token", "The access token is invalid.", null));
 		decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(List.of(
 				issuer, audience, new CommunicationAccessTokenValidator())));
-		return decoder;
+		return new SessionCheckingJwtDecoder(decoder, sessionAuthority);
+	}
+
+	@Bean(destroyMethod = "close")
+	SessionAuthorityClient communicationSessionAuthorityClient(
+			CommunicationSecurityProperties properties,
+			@Value("${AUTH_SESSION_CHECK_URI:http://localhost:8081/api/v1/internal/auth/session-check}") URI uri) {
+		return new SessionAuthorityClient(uri, properties.accessTokenCookieName());
 	}
 
 	@Bean
@@ -78,8 +94,19 @@ public class CommunicationSecurityConfiguration {
 		http.authorizeHttpRequests(authorize -> authorize
 				.requestMatchers("/actuator/health", "/actuator/health/**",
 						"/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
-				.requestMatchers("/api/v1/conversations", "/api/v1/conversations/**").hasRole("DOCTOR")
-				.anyRequest().denyAll())
+				.requestMatchers(HttpMethod.GET, "/api/v1/conversations/ws", "/api/v1/conversations/ws/**")
+                        .hasAuthority(CommunicationPermissions.MESSAGE_STREAM)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/conversations", "/api/v1/conversations/**")
+                        .hasAuthority(CommunicationPermissions.CONVERSATION_READ)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/conversations", "/api/v1/conversations/**")
+                        .hasAuthority(CommunicationPermissions.CONVERSATION_WRITE)
+                        .requestMatchers("/api/v1/sharing/**")
+                        .hasAuthority(CommunicationPermissions.SHARING_DECIDE)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/referrals", "/api/v1/referrals/**")
+                        .hasAuthority(CommunicationPermissions.REFERRAL_READ)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/referrals", "/api/v1/referrals/**")
+                        .hasAuthority(CommunicationPermissions.REFERRAL_MANAGE)
+                        .anyRequest().denyAll())
 			.csrf(csrf -> csrf.spa().csrfTokenRepository(csrfRepository))
 			.addFilterBefore(new CookieAuthenticatedCsrfFilter(
 					properties.accessTokenCookieName(), properties.csrfTokenName(),

@@ -1,5 +1,13 @@
 package com.sahha.scheduling.config;
 
+import org.springframework.http.HttpMethod;
+import com.sahha.scheduling.security.SchedulingPermissions;
+
+import java.net.URI;
+import org.springframework.beans.factory.annotation.Value;
+import com.sahha.session.SessionAuthorityClient;
+import com.sahha.session.SessionCheckingJwtDecoder;
+
 import java.time.Clock;
 import java.util.List;
 
@@ -39,7 +47,8 @@ public class SchedulingSecurityConfiguration {
 	}
 
 	@Bean
-	JwtDecoder schedulingJwtDecoder(SchedulingSecurityProperties properties) {
+	JwtDecoder schedulingJwtDecoder(
+			SchedulingSecurityProperties properties, SessionAuthorityClient sessionAuthority) {
 		NimbusJwtDecoder decoder = NimbusJwtDecoder
 				.withJwkSetUri(properties.jwkSetUri().toString())
 				.jwsAlgorithm(SignatureAlgorithm.RS256)
@@ -59,7 +68,14 @@ public class SchedulingSecurityConfiguration {
 														null));
 		decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
 				List.of(issuer, audience, new SchedulingAccessTokenValidator())));
-		return decoder;
+		return new SessionCheckingJwtDecoder(decoder, sessionAuthority);
+	}
+
+	@Bean(destroyMethod = "close")
+	SessionAuthorityClient schedulingSessionAuthorityClient(
+			SchedulingSecurityProperties properties,
+			@Value("${AUTH_SESSION_CHECK_URI:http://localhost:8081/api/v1/internal/auth/session-check}") URI uri) {
+		return new SessionAuthorityClient(uri, properties.accessTokenCookieName());
 	}
 
 	@Bean
@@ -103,32 +119,27 @@ public class SchedulingSecurityConfiguration {
 								"/swagger-ui.html",
 								"/swagger-ui/**")
 						.permitAll()
-						.requestMatchers(
-								"/api/v1/internal/clinical/appointments/**",
-								"/api/v1/internal/clinical/patients/**")
-						.hasRole("DOCTOR")
-						.requestMatchers(
-								"/api/v1/availability/mine/**",
-								"/api/v1/appointments/mine",
-								"/api/v1/appointments/mine/**")
-						.authenticated()
-						.requestMatchers(
-								"/api/v1/availability/me",
-								"/api/v1/availability/me/**")
-						.hasRole("DOCTOR")
-						.requestMatchers(
-								"/api/v1/availability/doctors",
-								"/api/v1/availability/doctors/**")
-						.hasAnyRole(
-								"DOCTOR",
-								"RECEPTIONIST",
-								"ORGANIZATION_ADMIN")
-						.requestMatchers("/api/v1/appointments/**", "/api/v1/appointments")
-						.hasAnyRole(
-								"DOCTOR",
-								"RECEPTIONIST",
-								"ORGANIZATION_ADMIN")
-						.anyRequest()
+						.requestMatchers("/api/v1/internal/clinical/appointments/**", "/api/v1/internal/clinical/patients/**")
+                        .hasAuthority(SchedulingPermissions.CLINICAL_CONTEXT)
+                        .requestMatchers("/api/v1/availability/mine/**", "/api/v1/appointments/mine", "/api/v1/appointments/mine/**")
+                        .hasAuthority(SchedulingPermissions.PATIENT_SELF)
+                        .requestMatchers("/api/v1/availability/me", "/api/v1/availability/me/**")
+                        .hasAuthority(SchedulingPermissions.AVAILABILITY_SELF)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/availability/doctors", "/api/v1/availability/doctors/**")
+                        .hasAuthority(SchedulingPermissions.DIRECTORY_READ)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/appointments", "/api/v1/appointments/*")
+                        .hasAuthority(SchedulingPermissions.APPOINTMENT_READ)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/appointments")
+                        .hasAuthority(SchedulingPermissions.BOOK)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/appointments/*/confirm", "/api/v1/appointments/*/reject")
+                        .hasAuthority(SchedulingPermissions.RESPOND)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/appointments/*/reschedule", "/api/v1/appointments/*/cancel", "/api/v1/appointments/*/no-show")
+                        .hasAuthority(SchedulingPermissions.ADJUST)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/appointments/*/check-in")
+                        .hasAuthority(SchedulingPermissions.CHECK_IN)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/appointments/*/start", "/api/v1/appointments/*/complete")
+                        .hasAuthority(SchedulingPermissions.TREAT)
+                        .anyRequest()
 						.denyAll())
 				.csrf(csrf -> csrf
 						.spa()

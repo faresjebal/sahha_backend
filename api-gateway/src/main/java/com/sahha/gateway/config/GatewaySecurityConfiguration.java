@@ -1,5 +1,12 @@
 package com.sahha.gateway.config;
 
+import com.sahha.gateway.security.GatewayPermissions;
+
+import java.net.URI;
+import org.springframework.beans.factory.annotation.Value;
+import com.sahha.session.SessionAuthorityClient;
+import com.sahha.session.SessionCheckingReactiveJwtDecoder;
+
 import java.time.Duration;
 import java.util.List;
 
@@ -38,7 +45,8 @@ import com.sahha.gateway.security.GatewaySecurityProblemWriter;
 public class GatewaySecurityConfiguration {
 
 	@Bean
-	ReactiveJwtDecoder gatewayJwtDecoder(GatewaySecurityProperties properties) {
+	ReactiveJwtDecoder gatewayJwtDecoder(
+			GatewaySecurityProperties properties, SessionAuthorityClient sessionAuthority) {
 		NimbusReactiveJwtDecoder decoder = NimbusReactiveJwtDecoder
 				.withJwkSetUri(properties.jwkSetUri().toString())
 				.jwsAlgorithm(SignatureAlgorithm.RS256)
@@ -58,7 +66,14 @@ public class GatewaySecurityConfiguration {
 														null));
 		decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
 				List.of(issuer, audience, new GatewayAccessTokenValidator())));
-		return decoder;
+		return new SessionCheckingReactiveJwtDecoder(decoder, sessionAuthority);
+	}
+
+	@Bean(destroyMethod = "close")
+	SessionAuthorityClient gatewaySessionAuthorityClient(
+			GatewaySecurityProperties properties,
+			@Value("${AUTH_SESSION_CHECK_URI:http://localhost:8081/api/v1/internal/auth/session-check}") URI uri) {
+		return new SessionAuthorityClient(uri, properties.accessTokenCookieName());
 	}
 
 	@Bean
@@ -141,7 +156,7 @@ public class GatewaySecurityConfiguration {
 						.pathMatchers(HttpMethod.OPTIONS, "/**")
 						.permitAll()
 						.pathMatchers("/api/v1/platform/**")
-						.hasRole("PLATFORM_ADMIN")
+						.hasAuthority(GatewayPermissions.PLATFORM_ROUTE)
 						.pathMatchers("/api/v1/**")
 						.authenticated()
 						.anyExchange()

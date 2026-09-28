@@ -44,7 +44,7 @@ public class CommunicationOutboxPublisher {
 		for (CommunicationOutboxEvent event : ready) {
 			try {
 				String payload = objectMapper.writeValueAsString(event.getPayload());
-				kafka.send(properties.topic(), event.getAggregateId().toString(), payload)
+				kafka.send(event.getDestinationTopic(), event.getAggregateId().toString(), payload)
 						.get(properties.sendTimeout().toMillis(), TimeUnit.MILLISECONDS);
 				event.published(clock.instant());
 			}

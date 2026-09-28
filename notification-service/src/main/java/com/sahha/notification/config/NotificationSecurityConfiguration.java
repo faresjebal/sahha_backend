@@ -1,5 +1,13 @@
 package com.sahha.notification.config;
 
+import org.springframework.http.HttpMethod;
+import com.sahha.notification.security.NotificationPermissions;
+
+import java.net.URI;
+import org.springframework.beans.factory.annotation.Value;
+import com.sahha.session.SessionAuthorityClient;
+import com.sahha.session.SessionCheckingJwtDecoder;
+
 import java.util.List;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -32,7 +40,8 @@ import com.sahha.notification.security.NotificationSecurityProblemWriter;
 public class NotificationSecurityConfiguration {
 
 	@Bean
-	JwtDecoder notificationJwtDecoder(NotificationSecurityProperties properties) {
+	JwtDecoder notificationJwtDecoder(
+			NotificationSecurityProperties properties, SessionAuthorityClient sessionAuthority) {
 		NimbusJwtDecoder decoder = NimbusJwtDecoder
 				.withJwkSetUri(properties.jwkSetUri().toString())
 				.jwsAlgorithm(SignatureAlgorithm.RS256)
@@ -52,7 +61,14 @@ public class NotificationSecurityConfiguration {
 														null));
 		decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
 				List.of(issuer, audience, new NotificationAccessTokenValidator())));
-		return decoder;
+		return new SessionCheckingJwtDecoder(decoder, sessionAuthority);
+	}
+
+	@Bean(destroyMethod = "close")
+	SessionAuthorityClient notificationSessionAuthorityClient(
+			NotificationSecurityProperties properties,
+			@Value("${AUTH_SESSION_CHECK_URI:http://localhost:8081/api/v1/internal/auth/session-check}") URI uri) {
+		return new SessionAuthorityClient(uri, properties.accessTokenCookieName());
 	}
 
 	@Bean
@@ -94,11 +110,14 @@ public class NotificationSecurityConfiguration {
 								"/swagger-ui.html",
 								"/swagger-ui/**")
 						.permitAll()
-						.requestMatchers(
-								"/api/v1/notifications",
-								"/api/v1/notifications/**")
-						.authenticated()
-						.anyRequest()
+						.requestMatchers(HttpMethod.GET, "/api/v1/notifications/ws", "/api/v1/notifications/ws/**",
+								"/api/v1/notifications/patient/ws")
+                        .hasAuthority(NotificationPermissions.STREAM_SELF)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/notifications", "/api/v1/notifications/**")
+                        .hasAuthority(NotificationPermissions.READ_SELF)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/notifications", "/api/v1/notifications/**")
+                        .hasAuthority(NotificationPermissions.UPDATE_SELF)
+                        .anyRequest()
 						.denyAll())
 				.csrf(csrf -> csrf
 						.spa()

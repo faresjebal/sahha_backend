@@ -143,6 +143,14 @@ public class UserAccount {
 		this.status = AccountStatus.ACTIVE;
 	}
 
+	public void updateProfile(String firstName, String lastName, String phoneNumber, Instant changedAt) {
+		if (!canAuthenticate()) throw new IllegalStateException("account is not active");
+		this.firstName = requireText(firstName, "firstName");
+		this.lastName = requireText(lastName, "lastName");
+		this.phoneNumber = normalizeOptional(phoneNumber);
+		this.updatedAt = requireNotBeforeCreation(changedAt, "changedAt");
+	}
+
 	public void releaseExpiredLock(Instant observedAt) {
 		Instant requiredObservedAt = Objects.requireNonNull(
 				observedAt,

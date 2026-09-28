@@ -112,13 +112,13 @@ public class ClinicalProblemDetailsHandler {
 				"urn:sahha:problem:consultation-incomplete", request));
 	}
 
-	@ExceptionHandler(SchedulingContextUnavailableException.class)
+	@ExceptionHandler({SchedulingContextUnavailableException.class, SharingContextUnavailableException.class, OrganisationContextUnavailableException.class})
 	ResponseEntity<ProblemDetail> schedulingUnavailable(
-			SchedulingContextUnavailableException exception,
+			RuntimeException exception,
 			HttpServletRequest request) {
 		return response(HttpStatus.SERVICE_UNAVAILABLE, problem(
-				HttpStatus.SERVICE_UNAVAILABLE, "Scheduling context unavailable",
-				"Appointment eligibility could not be verified. Try again later.",
+				HttpStatus.SERVICE_UNAVAILABLE, "Clinical access context unavailable",
+				"Organisation, appointment or sharing eligibility could not be verified. Try again later.",
 				"urn:sahha:problem:scheduling-context-unavailable", request));
 	}
 

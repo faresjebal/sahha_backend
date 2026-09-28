@@ -143,6 +143,22 @@ public class Organisation {
 				.toLowerCase(Locale.ROOT);
 	}
 
+	public void updateProfile(String name, String contactEmail, String phoneNumber,
+			String address, String city, String region, String postalCode,
+			String countryCode, UUID actorId, Instant now) {
+		this.name = required(name, 160, "name");
+		this.normalizedName = normalizeName(this.name);
+		this.contactEmail = required(contactEmail, 254, "contactEmail").toLowerCase(Locale.ROOT);
+		this.phoneNumber = required(phoneNumber, 32, "phoneNumber");
+		this.address = required(address, 300, "address");
+		this.city = required(city, 100, "city");
+		this.region = required(region, 100, "region");
+		this.postalCode = optional(postalCode, 20, "postalCode");
+		this.countryCode = required(countryCode, 2, "countryCode").toUpperCase(Locale.ROOT);
+		this.updatedBy = Objects.requireNonNull(actorId);
+		this.updatedAt = Objects.requireNonNull(now);
+	}
+
 	private static String required(
 			String value,
 			int maximumLength,

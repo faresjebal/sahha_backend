@@ -272,6 +272,74 @@ class DepartmentHttpIntegrationTests {
 						"urn:sahha:problem:concurrent-department-modification"));
 	}
 
+
+	@Test
+	void organisationProfilePersistsAdministrativeFieldsAndAudits() throws Exception {
+		Workspace workspace = workspace("Profile", ADMIN_TOKEN);
+		long audits = auditRepository.countByOrganisationId(workspace.organisationId());
+		long outbox = outboxRepository.count();
+		Cookie csrf = csrf();
+		mockMvc.perform(put("/api/v1/organisations/current/profile")
+				.cookie(access(ADMIN_TOKEN), csrf).header("X-XSRF-TOKEN", csrf.getValue())
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody(0)))
+			.andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+			.andExpect(jsonPath("$.id").value(workspace.organisationId().toString()))
+			.andExpect(jsonPath("$.name").value("Updated synthetic clinic"))
+			.andExpect(jsonPath("$.type").value("CLINIC"))
+			.andExpect(jsonPath("$.status").value("ACTIVE"))
+			.andExpect(jsonPath("$.version").value(1));
+		entityManager.flush();
+		entityManager.clear();
+		mockMvc.perform(get("/api/v1/organisations/current/profile").cookie(access(ADMIN_TOKEN)))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.name").value("Updated synthetic clinic"));
+		assertEquals(audits + 1, auditRepository.countByOrganisationId(workspace.organisationId()));
+		assertEquals(outbox + 1, outboxRepository.count());
+		outboxRepository.findAll().stream().filter(event -> event.getEventType().equals("ORGANISATION_PROFILE_UPDATED"))
+			.forEach(event -> {
+				assertFalse(event.getPayload().containsKey("contactEmail"));
+				assertFalse(event.getPayload().containsKey("address"));
+			});
+		mockMvc.perform(put("/api/v1/organisations/current/profile")
+				.cookie(access(ADMIN_TOKEN), csrf).header("X-XSRF-TOKEN", csrf.getValue())
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody(0)))
+			.andExpect(status().isConflict());
+	}
+
+	@Test
+	void organisationProfileRequiresCsrfValidFieldsAndLiveAdminInExactOrganisation() throws Exception {
+		Workspace own = workspace("OwnProfile", ADMIN_TOKEN);
+		Workspace other = workspace("OtherProfile", OTHER_TOKEN);
+		Cookie csrf = csrf();
+		mockMvc.perform(put("/api/v1/organisations/current/profile").cookie(access(ADMIN_TOKEN))
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody(0)))
+			.andExpect(status().isForbidden());
+		mockMvc.perform(put("/api/v1/organisations/current/profile").cookie(access(ADMIN_TOKEN), csrf)
+				.header("X-XSRF-TOKEN", csrf.getValue()).contentType(MediaType.APPLICATION_JSON)
+				.content(profileBody(0).replace("updated@example.test", "not-email")))
+			.andExpect(status().isBadRequest());
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(jwt(USER_TOKEN, own.userId(),
+				other.organisationId(), List.of("ORGANIZATION_ADMIN")));
+		mockMvc.perform(get("/api/v1/organisations/current/profile").cookie(access(USER_TOKEN)))
+			.andExpect(status().isForbidden());
+		when(jwtDecoder.decode(USER_TOKEN)).thenReturn(jwt(USER_TOKEN, own.userId(),
+				own.organisationId(), List.of("RECEPTIONIST")));
+		mockMvc.perform(get("/api/v1/organisations/current/profile").cookie(access(USER_TOKEN)))
+			.andExpect(status().isForbidden());
+		jdbcTemplate.update("UPDATE organisation_membership SET status = 'SUSPENDED' WHERE organisation_id = ? AND user_id = ?",
+				own.organisationId(), own.userId());
+		entityManager.clear();
+		mockMvc.perform(get("/api/v1/organisations/current/profile").cookie(access(ADMIN_TOKEN)))
+			.andExpect(status().isForbidden());
+	}
+
+	private static String profileBody(long version) {
+		return """
+				{"name":"Updated synthetic clinic","contactEmail":"updated@example.test",
+				 "phoneNumber":"+21670000001","address":"14 Synthetic Avenue","city":"Tunis",
+				 "region":"Tunis","postalCode":"1000","countryCode":"TN","version":%d}
+				""".formatted(version);
+	}
+
 	private Workspace workspace(String prefix, String token) {
 		UUID platformActor = UUID.randomUUID();
 		UUID userId = UUID.randomUUID();

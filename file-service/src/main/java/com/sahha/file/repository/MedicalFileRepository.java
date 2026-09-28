@@ -14,6 +14,15 @@ import com.sahha.file.entity.MedicalFile;
 
 public interface MedicalFileRepository extends JpaRepository<MedicalFile, UUID> {
 
+    org.springframework.data.domain.Page<MedicalFile> findByOrganisationIdAndConsultationIdAndPatientRegistrationIdAndPatientIdAndUploadStatusAndScanStatusOrderByCreatedAtDescIdDesc(
+            UUID organisationId, UUID consultationId, UUID patientRegistrationId, UUID patientId,
+            FileUploadStatus uploadStatus, FileScanStatus scanStatus, org.springframework.data.domain.Pageable pageable);
+
+	Optional<MedicalFile> findByIdAndOrganisationId(UUID id, UUID organisationId);
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	Optional<MedicalFile> findForUpdateByIdAndOrganisationId(UUID id, UUID organisationId);
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<MedicalFile> findForUpdateById(UUID id);
 

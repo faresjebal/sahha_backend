@@ -136,6 +136,23 @@ public class InAppNotification {
 		return notification;
 	}
 
+	public static InAppNotification forReferralRecipient(
+			com.sahha.notification.event.ReferralEventV1 event,
+			UUID recipientUserId, Instant createdAt) {
+		InAppNotification notification = new InAppNotification();
+		notification.id = UUID.randomUUID();
+		notification.sourceEventId = Objects.requireNonNull(event.eventId());
+		notification.organisationId = Objects.requireNonNull(event.organisationId());
+		notification.recipientUserId = Objects.requireNonNull(recipientUserId);
+		notification.notificationType = event.notificationType();
+		notification.resourceType = "REFERRAL";
+		notification.resourceId = Objects.requireNonNull(event.referralId());
+		notification.resourceVersion = Objects.requireNonNull(event.resourceVersion());
+		notification.eventOccurredAt = Objects.requireNonNull(event.occurredAt());
+		notification.createdAt = Objects.requireNonNull(createdAt);
+		return notification;
+	}
+
 	public void markRead(Instant readAt) {
 		Instant requiredReadAt = Objects.requireNonNull(readAt);
 		if (requiredReadAt.isBefore(createdAt)) {

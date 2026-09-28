@@ -9,8 +9,7 @@ import { useForm } from 'react-hook-form'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
 import { useAuth } from '../../app/auth/AuthProvider'
-import { roleHome } from '../../app/auth/roleRoutes'
-import { useWorkflow } from '../../app/data/WorkflowProvider'
+import { sessionDestination } from '../../app/auth/roleRoutes'
 import { env } from '../../config/env'
 import type { AppRole, DoctorType, StaffRole } from '../../models/auth'
 import { apiErrorMessage } from '../../services/api/ApiError'
@@ -24,11 +23,6 @@ const roleOptions: Array<{ value: AppRole; label: string; copy: string; icon: ty
   { value:'receptionist', label:'Receptionist', copy:'Restricted registration and patient-service tools.', icon:KeyRound },
   { value:'platform-admin', label:'Platform administrator', copy:'Organisations, verification, trust, and platform health.', icon:HeartPulse },
 ]
-
-const roleRoutePrefix: Record<AppRole, string> = {
-  patient:'/patient/', doctor:'/doctor/', 'hospital-operations':'/hospital/operations/',
-  staff:'/staff/', 'hospital-super-admin':'/hospital/admin/', receptionist:'/reception/', 'platform-admin':'/platform/',
-}
 
 const staffOptions: Array<{value:StaffRole;label:string;icon:typeof Hospital}> = [
   {value:'NURSE',label:'Nurse',icon:HeartPulse},
@@ -109,7 +103,6 @@ export function LoginPage() {
   const auth = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { resetDemo } = useWorkflow()
   const selected = useMemo(
     () => env.useAuthMocks
       ? roleOptions.find(option => option.value === role)!
@@ -147,9 +140,7 @@ export function LoginPage() {
         && !session.user.organizationId
       const safeDestination = requiresOrganisationSelection
         ? '/organisations/select'
-        : (from?.startsWith(roleRoutePrefix[session.user.role])
-            ? from
-            : roleHome[session.user.role])
+        : sessionDestination(session, from)
       navigate(safeDestination, { replace:true })
     } catch (loginError) {
       setServerError(apiErrorMessage(loginError, 'Sign in failed. Check your details and try again.'))
@@ -195,7 +186,6 @@ export function LoginPage() {
       <footer>
         <KeyRound/>
         <span>{env.useAuthMocks ? 'Demo authentication is active. No backend credentials are used.' : 'Access and refresh tokens stay inside scoped HttpOnly cookies. The interface never receives their values.'}</span>
-        {env.useAuthMocks&&<button type="button" className="text-button demo-reset" onClick={resetDemo}><RotateCcw/>Reset demonstration data</button>}
       </footer>
     </section>
   </AuthenticationLayout>

@@ -33,13 +33,13 @@ public class FileAuditEvent {
 	@Column(name = "actor_user_id", nullable = false, updatable = false)
 	private UUID actorUserId;
 
-	@Column(name = "medical_file_id", nullable = false, updatable = false)
+    @Column(name = "medical_file_id", updatable = false)
 	private UUID medicalFileId;
 
-	@Column(name = "consultation_id", nullable = false, updatable = false)
+	@Column(name = "consultation_id", updatable = false)
 	private UUID consultationId;
 
-	@Column(name = "patient_registration_id", nullable = false, updatable = false)
+	@Column(name = "patient_registration_id", updatable = false)
 	private UUID patientRegistrationId;
 
 	@Enumerated(EnumType.STRING)
@@ -83,7 +83,37 @@ public class FileAuditEvent {
 		return audit;
 	}
 
-	private static String optional(String value, int maximumLength, String fieldName) {
+	public static FileAuditEvent sharedDenied(UUID organisationId, UUID actorUserId,
+			UUID fileId, String reason, String requestId, Instant now) {
+		FileAuditEvent audit = new FileAuditEvent();
+		audit.id = UUID.randomUUID();
+		audit.organisationId = Objects.requireNonNull(organisationId);
+		audit.actorUserId = Objects.requireNonNull(actorUserId);
+		audit.medicalFileId = Objects.requireNonNull(fileId);
+		audit.eventType = FileAuditEventType.ACCESS_DENIED;
+		audit.result = FileAuditResult.DENIED;
+		audit.reasonCode = required(reason, 64, "reasonCode");
+		audit.requestId = required(requestId, 128, "requestId");
+		audit.occurredAt = Objects.requireNonNull(now);
+		return audit;
+	}
+
+    public static FileAuditEvent careDocuments(UUID org, UUID actor, UUID patient, UUID consultation,
+            FileAuditResult result, String reason, String requestId, Instant now) {
+        FileAuditEvent audit = new FileAuditEvent();
+        audit.id = UUID.randomUUID(); audit.organisationId = Objects.requireNonNull(org);
+        audit.actorUserId = Objects.requireNonNull(actor);
+        audit.patientRegistrationId = Objects.requireNonNull(patient);
+        audit.consultationId = Objects.requireNonNull(consultation);
+        audit.eventType = FileAuditEventType.CARE_DOCUMENTS_READ;
+        audit.result = Objects.requireNonNull(result);
+        audit.reasonCode = required(reason, 64, "reasonCode");
+        audit.requestId = required(requestId, 128, "requestId");
+        audit.occurredAt = Objects.requireNonNull(now);
+        return audit;
+    }
+
+    private static String optional(String value, int maximumLength, String fieldName) {
 		return value == null || value.isBlank() ? null : required(value, maximumLength, fieldName);
 	}
 

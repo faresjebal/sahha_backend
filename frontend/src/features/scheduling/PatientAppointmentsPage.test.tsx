@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { ApiError } from '../../services/api/ApiError'
 import { PatientAppointmentsPage } from './PatientAppointmentsPage'
 
@@ -33,7 +34,7 @@ const renderPage = () => {
     defaultOptions:{ queries:{ retry:false }, mutations:{ retry:false } },
   })
   const Wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}><MemoryRouter>{children}</MemoryRouter></QueryClientProvider>
   )
   return render(<PatientAppointmentsPage/>, { wrapper:Wrapper })
 }

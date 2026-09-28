@@ -1,5 +1,13 @@
 package com.sahha.clinical.config;
 
+import org.springframework.http.HttpMethod;
+import com.sahha.clinical.security.ClinicalPermissions;
+
+import java.net.URI;
+import org.springframework.beans.factory.annotation.Value;
+import com.sahha.session.SessionAuthorityClient;
+import com.sahha.session.SessionCheckingJwtDecoder;
+
 import java.time.Clock;
 import java.util.List;
 
@@ -40,7 +48,8 @@ public class ClinicalSecurityConfiguration {
 	}
 
 	@Bean
-	JwtDecoder clinicalJwtDecoder(ClinicalSecurityProperties properties) {
+	JwtDecoder clinicalJwtDecoder(
+			ClinicalSecurityProperties properties, SessionAuthorityClient sessionAuthority) {
 		NimbusJwtDecoder decoder = NimbusJwtDecoder
 				.withJwkSetUri(properties.jwkSetUri().toString())
 				.jwsAlgorithm(SignatureAlgorithm.RS256)
@@ -56,7 +65,14 @@ public class ClinicalSecurityConfiguration {
 										"invalid_token", "The access token is invalid.", null));
 		decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
 				List.of(issuer, audience, new ClinicalAccessTokenValidator())));
-		return decoder;
+		return new SessionCheckingJwtDecoder(decoder, sessionAuthority);
+	}
+
+	@Bean(destroyMethod = "close")
+	SessionAuthorityClient clinicalSessionAuthorityClient(
+			ClinicalSecurityProperties properties,
+			@Value("${AUTH_SESSION_CHECK_URI:http://localhost:8081/api/v1/internal/auth/session-check}") URI uri) {
+		return new SessionAuthorityClient(uri, properties.accessTokenCookieName());
 	}
 
 	@Bean
@@ -95,13 +111,27 @@ public class ClinicalSecurityConfiguration {
 								"/actuator/health", "/actuator/health/**",
 								"/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
 						.permitAll()
-						.requestMatchers("/api/v1/internal/clinical/**")
-						.hasRole("DOCTOR")
-						.requestMatchers("/api/v1/consultations", "/api/v1/consultations/**")
-						.hasRole("DOCTOR")
-						.requestMatchers("/api/v1/clinical/**")
-						.hasRole("DOCTOR")
-						.anyRequest().denyAll())
+						.requestMatchers(HttpMethod.GET, "/api/v1/internal/clinical/**")
+                        .hasAuthority(ClinicalPermissions.ATTACHMENT_CONTEXT)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/clinical/shared/**")
+                        .hasAuthority(ClinicalPermissions.SHARED_READ)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/clinical/shared-care/**")
+                        .hasAuthority(ClinicalPermissions.SHARED_CARE_READ)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/clinical/patients/*/summary")
+                        .hasAuthority(ClinicalPermissions.SUMMARY_READ)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/consultations", "/api/v1/consultations/**")
+                        .hasAuthority(ClinicalPermissions.RECORD_READ)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/consultations/*/finalize", "/api/v1/consultations/*/appointment-completion-recovery")
+                        .hasAuthority(ClinicalPermissions.FINALIZE)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/consultations/*/corrections")
+                        .hasAuthority(ClinicalPermissions.CORRECT)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/consultations")
+                        .hasAuthority(ClinicalPermissions.DRAFT_WRITE)
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/consultations/*/draft-content")
+                        .hasAuthority(ClinicalPermissions.DRAFT_WRITE)
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/consultations/*/draft")
+                        .hasAuthority(ClinicalPermissions.DRAFT_WRITE)
+                        .anyRequest().denyAll())
 				.csrf(csrf -> csrf.spa().csrfTokenRepository(csrfTokenRepository))
 				.addFilterBefore(new CookieAuthenticatedCsrfFilter(
 						properties.accessTokenCookieName(), properties.csrfTokenName(),

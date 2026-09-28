@@ -61,7 +61,7 @@ class OrganisationSecurityPrimitiveTests {
 	}
 
 	@Test
-	void converterMapsOnlyPlatformRolesToSpringAuthorities() {
+	void converterMapsPlatformPermissionsWithoutOrganisationAdministration() {
 		var authorities = new OrganisationPlatformRoleConverter()
 				.convert(jwt(
 						UUID.randomUUID().toString(),
@@ -71,7 +71,8 @@ class OrganisationSecurityPrimitiveTests {
 						"access"));
 
 		assertEquals(
-				List.of("ROLE_PLATFORM_ADMIN"),
+				List.of(OrganisationPermissions.CONTEXT_READ, OrganisationPermissions.INVITATIONS_SELF,
+                        OrganisationPermissions.PLATFORM_MANAGE, OrganisationPermissions.PLATFORM_READ),
 				authorities.stream()
 						.map(authority -> authority.getAuthority())
 						.toList());

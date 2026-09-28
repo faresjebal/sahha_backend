@@ -59,6 +59,13 @@ const message: RealtimeNotificationMessage = {
 }
 
 describe('Notification STOMP-over-WebSocket client', () => {
+  it('routes patient streams only through the Gateway with an encoded registration selector', () => {
+    const url = new URL(notificationWebSocketUrl('/api/v1', 'https://sahha.example', 'own/registration'))
+    expect(url.protocol).toBe('wss:')
+    expect(url.host).toBe('sahha.example')
+    expect(url.pathname).toBe('/api/v1/notifications/patient/ws')
+    expect(url.searchParams.get('registrationId')).toBe('own/registration')
+  })
   beforeEach(() => {
     vi.useFakeTimers()
     vi.spyOn(httpClient, 'getCsrfToken').mockResolvedValue({

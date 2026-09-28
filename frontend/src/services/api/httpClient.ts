@@ -57,6 +57,11 @@ export interface CsrfTokenResource {
 
 let csrfToken: CsrfTokenResource | null = null
 let csrfRequest: Promise<CsrfTokenResource> | null = null
+let sessionGeneration = 0
+const sessionControllers = new Set<AbortController>()
+const assertCurrentSession = (generation: number) => {
+  if (generation !== sessionGeneration) throw new DOMException('Session changed', 'AbortError')
+}
 
 const invalidateCsrfToken = () => {
   csrfToken = null
@@ -67,6 +72,8 @@ const loadCsrfToken = () => {
   if (csrfToken) return Promise.resolve(csrfToken)
   if (csrfRequest) return csrfRequest
   const controller = new AbortController()
+  const generation = sessionGeneration
+  sessionControllers.add(controller)
   const timeout = window.setTimeout(() => controller.abort(), env.requestTimeoutMs)
   csrfRequest = fetch(requestUrl('/auth/csrf'), {
     method: 'GET',
@@ -76,6 +83,7 @@ const loadCsrfToken = () => {
   })
     .then(parseResponse<CsrfTokenResource>)
     .then(resource => {
+      assertCurrentSession(generation)
       if (!resource.headerName || !resource.token) {
         throw new ApiError({
           type:'urn:sahha:problem:invalid-csrf-response',
@@ -100,7 +108,8 @@ const loadCsrfToken = () => {
     })
     .finally(() => {
       window.clearTimeout(timeout)
-      csrfRequest = null
+      sessionControllers.delete(controller)
+      if (generation === sessionGeneration) csrfRequest = null
     })
   return csrfRequest
 }
@@ -110,6 +119,12 @@ const requiresCsrf = (method: string | undefined) =>
 
 export const httpClient = {
   invalidateCsrfToken,
+  resetSessionRequests() {
+    sessionGeneration++
+    for (const controller of sessionControllers) controller.abort()
+    sessionControllers.clear()
+    invalidateCsrfToken()
+  },
 
   getCsrfToken() {
     return loadCsrfToken()
@@ -117,6 +132,8 @@ export const httpClient = {
 
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const controller = new AbortController()
+    const generation = sessionGeneration
+    sessionControllers.add(controller)
     const timeout = window.setTimeout(() => controller.abort(), options.timeoutMs || env.requestTimeoutMs)
     try {
       const {
@@ -135,7 +152,8 @@ export const httpClient = {
       while (true) {
         try {
           const csrfResource = csrfProtected ? await loadCsrfToken() : null
-          return await parseResponse<T>(await fetch(requestUrl(path), {
+          assertCurrentSession(generation)
+          const result = await parseResponse<T>(await fetch(requestUrl(path), {
             ...requestOptions,
             credentials: 'include',
             signal: controller.signal,
@@ -147,7 +165,10 @@ export const httpClient = {
             },
             body: rawBody ?? (body !== undefined ? JSON.stringify(body) : undefined),
           }))
+          assertCurrentSession(generation)
+          return result
         } catch (error) {
+          assertCurrentSession(generation)
           if (
             mayRetryWithFreshCsrf
             && error instanceof ApiError
@@ -167,6 +188,7 @@ export const httpClient = {
       throw error
     } finally {
       window.clearTimeout(timeout)
+      sessionControllers.delete(controller)
     }
   },
 
@@ -175,13 +197,15 @@ export const httpClient = {
     options:BlobRequestOptions = {},
   ):Promise<Blob> {
     const controller = new AbortController()
+    const generation = sessionGeneration
+    sessionControllers.add(controller)
     const timeout = window.setTimeout(
       () => controller.abort(),
       options.timeoutMs || env.requestTimeoutMs,
     )
     try {
       const { timeoutMs: _timeoutMs, ...requestOptions } = options
-      return await parseBlobResponse(await fetch(requestUrl(path), {
+      const result = await parseBlobResponse(await fetch(requestUrl(path), {
         ...requestOptions,
         method:requestOptions.method || 'GET',
         credentials:'include',
@@ -191,6 +215,8 @@ export const httpClient = {
           ...requestOptions.headers,
         },
       }))
+      assertCurrentSession(generation)
+      return result
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         throw new ApiError({
@@ -203,6 +229,7 @@ export const httpClient = {
       throw error
     } finally {
       window.clearTimeout(timeout)
+      sessionControllers.delete(controller)
     }
   },
 }

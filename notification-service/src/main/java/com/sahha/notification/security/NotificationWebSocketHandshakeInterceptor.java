@@ -32,7 +32,9 @@ public class NotificationWebSocketHandshakeInterceptor
 			ServerHttpResponse response,
 			WebSocketHandler wsHandler,
 			Map<String, Object> attributes) {
-		if (!(request.getPrincipal() instanceof JwtAuthenticationToken authentication)) {
+		if (!(request.getPrincipal() instanceof JwtAuthenticationToken authentication)
+                || authentication.getAuthorities().stream().noneMatch(
+                        authority -> NotificationPermissions.STREAM_SELF.equals(authority.getAuthority()))) {
 			return reject(response, HttpStatus.UNAUTHORIZED);
 		}
 		try {

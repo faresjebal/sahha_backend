@@ -68,6 +68,46 @@ class NotificationInboxHttpIntegrationTests {
 
 	private long sourceOffset;
 
+	@Autowired
+	private com.sahha.notification.service.referralnotificationservice.ReferralNotificationService referralService;
+
+	@Test
+	void referralInboxRecoveryAndReadAreParticipantAndOrganisationScoped() throws Exception {
+		UUID organisation = UUID.randomUUID();
+		UUID user = workspace(TOKEN, organisation, "DOCTOR");
+		UUID referral = UUID.randomUUID();
+		for (int index = 0; index < 3; index++) {
+			var event = new com.sahha.notification.event.ReferralEventV1(
+					UUID.randomUUID(), "referral.sent.v1", 1, Instant.now(),
+					index == 1 ? UUID.randomUUID() : organisation, referral, UUID.randomUUID(),
+					List.of(index == 2 ? UUID.randomUUID() : user), "SENT", (long) index);
+			referralService.consume(event, new com.sahha.notification.event.CommunicationEventSource(
+					"inbox-referral-" + event.eventId(), 0, 0));
+		}
+		mockMvc.perform(get("/api/v1/notifications").cookie(access(TOKEN)))
+				.andExpect(status().isOk())
+				.andExpect(header().string("Cache-Control", "no-store"))
+				.andExpect(jsonPath("$.items.length()").value(1))
+				.andExpect(jsonPath("$.items[0].resourceType").value("REFERRAL"))
+				.andExpect(jsonPath("$.items[0].resourceId").value(referral.toString()))
+				.andExpect(jsonPath("$.items[0].notificationType").value("REFERRAL_RECEIVED"))
+				.andExpect(jsonPath("$.items[0].appointmentStatus").isEmpty())
+				.andExpect(jsonPath("$.items[0].patientId").doesNotExist())
+				.andExpect(jsonPath("$.items[0].recipientUserId").doesNotExist())
+				.andExpect(jsonPath("$.items[0].sourceEventId").doesNotExist());
+		var owned = notificationRepository.findAllByRecipientUserIdOrderByCreatedAtDesc(user).stream()
+				.filter(value -> value.getOrganisationId().equals(organisation)).findFirst().orElseThrow();
+		mockMvc.perform(post("/api/v1/notifications/{id}/read", owned.getId()).cookie(access(TOKEN)))
+				.andExpect(status().isForbidden());
+		mockMvc.perform(post("/api/v1/notifications/{id}/read", owned.getId())
+				.cookie(access(TOKEN), csrf()).header("X-XSRF-TOKEN", CSRF_VALUE))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.read").value(true));
+		workspace(TOKEN, organisation, "DOCTOR");
+		mockMvc.perform(post("/api/v1/notifications/{id}/read", owned.getId())
+				.cookie(access(TOKEN), csrf()).header("X-XSRF-TOKEN", CSRF_VALUE))
+				.andExpect(status().isNotFound());
+	}
+
 	@BeforeEach
 	void resetOffset() {
 		sourceOffset = 0;

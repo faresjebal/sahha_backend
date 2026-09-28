@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class GatewayPlatformRoleConverterTests {
 
 	@Test
-	void mapsDistinctPlatformRolesToSpringRoleAuthorities() {
+	void mapsOnlyTheExplicitPlatformRoleToCoarseRoutePermission() {
 		Jwt jwt = Jwt.withTokenValue("aaa.bbb.ccc")
 				.header("alg", "RS256")
 				.subject("synthetic-user")
@@ -26,7 +26,7 @@ class GatewayPlatformRoleConverterTests {
 				.build();
 
 		assertEquals(
-				List.of("ROLE_PLATFORM_ADMIN", "ROLE_PATIENT"),
+				List.of(GatewayPermissions.PLATFORM_ROUTE),
 				new GatewayPlatformRoleConverter()
 						.convert(jwt)
 						.stream()

@@ -1,6 +1,9 @@
 package com.sahha.clinical.controller;
 
 import java.util.UUID;
+import jakarta.servlet.http.HttpServletRequest;
+import com.sahha.clinical.config.RequestIdFilter;
+import com.sahha.clinical.service.consultationservice.ConsultationAuthorAccessService;
 
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -21,16 +24,21 @@ import com.sahha.clinical.service.consultationservice.ConsultationAttachmentAcce
 public class ClinicalAttachmentAccessController {
 
 	private final ConsultationAttachmentAccessService accessService;
+	private final ConsultationAuthorAccessService authorAccess;
 
 	public ClinicalAttachmentAccessController(
-			ConsultationAttachmentAccessService accessService) {
+			ConsultationAttachmentAccessService accessService,
+			ConsultationAuthorAccessService authorAccess) {
 		this.accessService = accessService;
+		this.authorAccess = authorAccess;
 	}
 
 	@GetMapping("/{consultationId}/attachment-context")
 	public ResponseEntity<ClinicalAttachmentContextResponse> resolveUploadContext(
 			@PathVariable UUID consultationId,
-			@AuthenticationPrincipal Jwt jwt) {
+			@AuthenticationPrincipal Jwt jwt, HttpServletRequest request) {
+		authorAccess.require(activeOrganisationId(jwt), actorUserId(jwt), consultationId,
+				jwt.getTokenValue(), RequestIdFilter.requestId(request));
 		return ResponseEntity.ok()
 				.cacheControl(CacheControl.noStore())
 				.body(accessService.resolveUploadContext(

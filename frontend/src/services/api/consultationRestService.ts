@@ -8,11 +8,15 @@ import type {
   PatientClinicalSummaryResource,
   RecoverAppointmentCompletionCommand,
   ReplaceConsultationDraftCommand,
+  ReferralSourcePageResource,
   UpdateConsultationDraftCommand,
 } from '../../models/clinical'
 import { httpClient } from './httpClient'
 
 export const consultationRestService = {
+  listReferralSources(page = 0, size = 20) {
+    return httpClient.request<ReferralSourcePageResource>(`/consultations/referral-sources?${new URLSearchParams({ page:String(page), size:String(size) })}`)
+  },
   create(command: CreateConsultationCommand) {
     return httpClient.request<ConsultationResource>('/consultations', {
       method:'POST',

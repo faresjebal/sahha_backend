@@ -49,6 +49,21 @@ public class AccountSecurityService {
 				.orElseThrow(InvalidAuthenticationException::new);
 	}
 
+	@Transactional
+	public CurrentAccountResponse updateProfile(UUID userId,
+			com.sahha.auth.dto.request.UpdateAccountProfileRequest request, Instant now) {
+		UserAccount account = userRepository.findByIdForUpdate(userId)
+				.orElseThrow(InvalidAuthenticationException::new);
+		if (account.getVersion() != request.version()) {
+			throw new IllegalStateException("account profile version changed");
+		}
+		account.updateProfile(request.firstName(), request.lastName(), request.phoneNumber(), now);
+		userRepository.saveAndFlush(account);
+		securityEventRecorder.record(SecurityEventType.ACCOUNT_PROFILE_UPDATED,
+				SecurityEventResult.SUCCESS, null, SecurityEventContext.account(userId), now);
+		return CurrentAccountResponse.from(account);
+	}
+
 	@Transactional(noRollbackFor = InvalidAuthenticationException.class)
 	public void changePassword(
 			UUID userId,

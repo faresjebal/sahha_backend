@@ -16,6 +16,7 @@ import com.sahha.scheduling.dto.response.AvailableSlotResponse;
 import com.sahha.scheduling.entity.Appointment;
 import com.sahha.scheduling.entity.AppointmentActorType;
 import com.sahha.scheduling.entity.AppointmentAuditEvent;
+import com.sahha.scheduling.entity.AppointmentAuditEventType;
 import com.sahha.scheduling.entity.AppointmentStatus;
 import com.sahha.scheduling.entity.DoctorAvailabilitySchedule;
 import com.sahha.scheduling.exception.AppointmentDoctorNotFoundException;
@@ -72,11 +73,21 @@ public class AppointmentBookingPersistenceService {
 						organisationId, request.bookingRequestId())
 				.orElse(null);
 		if (existing != null) {
+            // Rescheduling changes the appointment, never the original command.
+            // This append-only snapshot was committed atomically with its booking.
+            AppointmentAuditEvent original = auditRepository
+                    .findByOrganisationIdAndCommandRequestId(organisationId, request.bookingRequestId())
+                    .filter(event -> event.getEventType() == AppointmentAuditEventType.APPOINTMENT_BOOKED
+                            && existing.getId().equals(event.getAppointmentId())
+                            && organisationId.equals(event.getOrganisationId())
+                            && actorUserId.equals(event.getActorUserId())
+                            && actorType == event.getActorType())
+                    .orElseThrow(BookingRequestConflictException::new);
 			if (!existing.matchesInitialRequest(
 					actorUserId,
 					request.patientRegistrationId(),
 					request.doctorUserId(),
-					request.startsAt())) {
+					request.startsAt(), original.getNewStartsAt())) {
 				throw new BookingRequestConflictException();
 			}
 			return new AppointmentBookingResult(mapper.response(existing), false);

@@ -41,6 +41,7 @@ export interface ConversationMessageResource {
   senderDisplayName: string
   body: string
   sentAt: string
+  attachments?:import('./messageAttachment').MessageAttachmentReference[]
 }
 
 export type ConversationMessagePageResource = PageResponse<ConversationMessageResource>
@@ -50,9 +51,11 @@ export interface CreateConversationCommand {
   recipientUserId: string
   subject: string
   patientRegistrationId?: string
+  sourceConsultationId?: string
 }
 
 export interface SendConversationMessageCommand {
   messageRequestId: string
   body: string
+  attachmentIds?:string[]
 }

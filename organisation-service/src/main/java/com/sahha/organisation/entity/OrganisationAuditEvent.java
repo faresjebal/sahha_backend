@@ -85,6 +85,13 @@ public class OrganisationAuditEvent {
 		return event;
 	}
 
+	public static OrganisationAuditEvent profileUpdated(Organisation organisation,
+			UUID actorUserId, String requestId, Instant occurredAt) {
+		OrganisationAuditEvent event = created(organisation, actorUserId, requestId, occurredAt);
+		event.eventType = OrganisationAuditEventType.ORGANISATION_PROFILE_UPDATED;
+		return event;
+	}
+
 	public static OrganisationAuditEvent administratorAssigned(
 			OrganisationMembership membership,
 			UUID actorUserId,

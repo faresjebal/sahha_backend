@@ -27,7 +27,7 @@ public class CommunicationWebSocketHandshakeInterceptor implements HandshakeInte
 			Map<String, Object> attributes) {
 		if (!(request.getPrincipal() instanceof JwtAuthenticationToken authentication)
 				|| !authentication.getAuthorities().stream().anyMatch(
-						value -> "ROLE_DOCTOR".equals(value.getAuthority()))) {
+						value -> CommunicationPermissions.MESSAGE_STREAM.equals(value.getAuthority()))) {
 			return reject(response, HttpStatus.UNAUTHORIZED);
 		}
 		try {

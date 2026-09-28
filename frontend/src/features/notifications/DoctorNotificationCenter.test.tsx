@@ -63,7 +63,7 @@ describe('Doctor notification center', () => {
     authState.session.user.organizationId = 'organisation-1'
   })
 
-  const setup = () => {
+  const setup = (navigationTargets?: { appointment?:string; conversation?:string; referral?:string }, patientRegistrationId?: string) => {
     const service = {
       list:vi.fn().mockResolvedValue(page([notification])),
       unreadCount:vi.fn().mockResolvedValue({ unreadCount:1 }),
@@ -100,6 +100,8 @@ describe('Doctor notification center', () => {
         service={service}
         createRealtimeClient={createRealtimeClient}
         enabled
+        navigationTargets={navigationTargets}
+        patientRegistrationId={patientRegistrationId}
       />
       <RouteProbe/>
     </>, { wrapper:Wrapper })
@@ -112,6 +114,81 @@ describe('Doctor notification center', () => {
       service,
     }
   }
+
+  it('loads patient notifications without a staff organisation and recovers patient appointments on reconnect', async () => {
+    authState.session.user.organizationId = ''
+    const { service, queryClient, callbacks } = setup({ appointment:'/patient/appointments' }, 'own-registration')
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    fireEvent.click(await screen.findByRole('button', { name:'Notifications, 1 unread' }))
+    expect(await screen.findByText('Your private appointment inbox')).toBeInTheDocument()
+    expect(service.list).toHaveBeenCalled()
+    expect(queryClient.getQueryData(['notifications', 'patient:doctor-user-1:own-registration', 0, 20])).toBeTruthy()
+    act(() => callbacks[0].onConnected())
+    expect(invalidate).toHaveBeenCalledWith({ queryKey:['my-patient-appointments', 'own-registration'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey:['my-patient-slots', 'own-registration'] })
+    fireEvent.click(await screen.findByRole('button', { name:/New appointment request/ }))
+    await waitFor(() => expect(service.markRead).toHaveBeenCalledWith(notification.id))
+    expect(screen.getByLabelText('Current route')).toHaveTextContent('/patient/appointments')
+  })
+
+  it.each([
+    ['APPOINTMENT_CONFIRMED', 'Appointment confirmed'],
+    ['APPOINTMENT_REJECTED', 'Appointment request declined'],
+    ['APPOINTMENT_STARTED', 'Appointment started'],
+    ['APPOINTMENT_COMPLETED', 'Appointment completed'],
+    ['APPOINTMENT_NO_SHOW', 'Appointment marked as missed'],
+  ] as const)('renders patient status %s and ignores duplicate frames', async (type, title) => {
+    authState.session.user.organizationId = ''
+    const { callbacks, queryClient } = setup({}, 'own-registration')
+    fireEvent.click(await screen.findByRole('button', { name:'Notifications, 1 unread' }))
+    const update = { ...notification, id:'patient-update', notificationType:type }
+    act(() => {
+      callbacks[0].onNotification({ messageType:'NOTIFICATION_CREATED', notification:update })
+      callbacks[0].onNotification({ messageType:'NOTIFICATION_CREATED', notification:update })
+    })
+    expect(await screen.findByText(title)).toBeInTheDocument()
+    expect(queryClient.getQueryData(['notification-unread-count', 'patient:doctor-user-1:own-registration'])).toEqual({ unreadCount:2 })
+  })
+
+  it('lets organisation administrators mark notifications read without navigating to doctor routes', async () => {
+    const { service } = setup({})
+    fireEvent.click(await screen.findByRole('button', { name:'Notifications, 1 unread' }))
+    fireEvent.click(await screen.findByRole('button', { name:/New appointment request/ }))
+    await waitFor(() => expect(service.markRead).toHaveBeenCalledWith(notification.id))
+    expect(screen.getByLabelText('Current route')).toHaveTextContent('/doctor/overview')
+    expect(screen.getByRole('dialog', { name:'Notifications' })).toBeInTheDocument()
+  })
+
+  it.each([
+    ['REFERRAL_RECEIVED', 'New referral request'],
+    ['REFERRAL_ACCEPTED', 'Referral accepted'],
+    ['REFERRAL_REJECTED', 'Referral declined'],
+    ['REFERRAL_REVOKED', 'Referral revoked'],
+    ['REFERRAL_COMPLETED', 'Referral completed'],
+    ['REFERRAL_EXPIRED', 'Referral expired'],
+  ] as const)('merges %s once, refreshes referral state and opens the protected workspace', async (type, title) => {
+    const { callbacks, service, queryClient } = setup()
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    fireEvent.click(await screen.findByRole('button', { name:'Notifications, 1 unread' }))
+    const referral: NotificationResource = {
+      ...notification, id:'referral-notification', notificationType:type,
+      resourceType:'REFERRAL', resourceId:'referral-1', appointmentStatus:null,
+      appointmentStartsAt:null, appointmentEndsAt:null,
+      appointmentTimeZone:null, appointmentLocationLabel:null,
+    }
+    service.markRead.mockResolvedValueOnce({ ...referral, read:true, readAt:new Date().toISOString() })
+    act(() => {
+      callbacks[0].onNotification({ messageType:'NOTIFICATION_CREATED', notification:referral })
+      callbacks[0].onNotification({ messageType:'NOTIFICATION_CREATED', notification:referral })
+    })
+    expect(await screen.findAllByText(title)).toHaveLength(1)
+    expect(screen.getByRole('button', { name:'Notifications, 2 unread' })).toBeInTheDocument()
+    expect(invalidate).toHaveBeenCalledWith({ queryKey:['referrals', 'doctor-user-1', 'organisation-1'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey:['referral', 'doctor-user-1', 'organisation-1', 'referral-1'] })
+    fireEvent.click(screen.getByRole('button', { name:new RegExp(title) }))
+    await waitFor(() => expect(service.markRead).toHaveBeenCalledWith(referral.id))
+    expect(screen.getByLabelText('Current route')).toHaveTextContent('/doctor/referrals')
+  })
 
   it('recovers via REST and merges a validated realtime notification', async () => {
     const { callbacks, service } = setup()
