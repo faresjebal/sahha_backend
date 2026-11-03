@@ -1,0 +1,432 @@
+# Native hosted CI for the React frontend and all twelve Java applications.
+# First run: keep deployToDemo=false. Activation needs the reviewed VM release helper.
+name: sahha-$(Date:yyyyMMdd).$(Rev:r)
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - feature/organisation-service
+      - main
+
+pr:
+  branches:
+    include:
+      - feature/organisation-service
+      - main
+
+parameters:
+  - name: deployToDemo
+    displayName: Activate this tested release on the prepared demo VM
+    type: boolean
+    default: false
+
+variables:
+  mavenCache: $(Pipeline.Workspace)/.m2/repository
+  npmCache: $(Pipeline.Workspace)/.npm
+
+stages:
+  - stage: Build
+    displayName: Test and build frontend and backend
+    jobs:
+      - job: HostedBuild
+        displayName: Native Java 21 and React build
+        timeoutInMinutes: 60
+        cancelTimeoutInMinutes: 2
+        pool:
+          vmImage: ubuntu-24.04
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 1
+            persistCredentials: false
+
+          - bash: |
+              set -euo pipefail
+              test "${TF_BUILD:-}" = True
+              test "$(hostname -s)" != sahha-demo-vm
+              test -f pom.xml
+              test -f frontend/package-lock.json
+              test -f frontend/src/config/env.ts
+              test ! -e .env.database.local
+            displayName: Check hosted runner and canonical frontend
+
+          - task: JavaToolInstaller@0
+            displayName: Select Java 21
+            inputs:
+              versionSpec: '21'
+              jdkArchitectureOption: x64
+              jdkSourceOption: PreInstalled
+
+          - task: UseNode@1
+            displayName: Select Node.js 24 LTS
+            inputs:
+              version: 24.x
+
+          - task: Cache@2
+            displayName: Cache Maven dependencies
+            inputs:
+              key: 'maven | "$(Agent.OS)" | **/pom.xml'
+              restoreKeys: 'maven | "$(Agent.OS)"'
+              path: $(mavenCache)
+
+          - task: Cache@2
+            displayName: Cache npm downloads
+            inputs:
+              key: 'npm | "$(Agent.OS)" | frontend/package-lock.json'
+              restoreKeys: 'npm | "$(Agent.OS)"'
+              path: $(npmCache)
+
+          - bash: |
+              set -euo pipefail
+              test "$(hostname -s)" != sahha-demo-vm
+              sudo apt-get update -qq
+              sudo apt-get install -y --no-install-recommends postgresql-16 postgresql-contrib redis-server
+              python3 - <<'PY'
+              import os
+              from pathlib import Path
+              import secrets
+              import socket
+              import subprocess
+              import time
+
+              if os.name != 'posix' or os.environ.get('TF_BUILD') != 'True' or socket.gethostname().split('.')[0] == 'sahha-demo-vm':
+                  raise SystemExit('STOP: disposable test infrastructure is for hosted CI only.')
+              os.umask(0o077)
+              state = Path(os.environ['AGENT_TEMPDIRECTORY']) / 'sahha-ci'
+              state.mkdir(mode=0o700)
+              pg = Path('/usr/lib/postgresql/16/bin')
+              data = state / 'postgres'
+              admin_password = secrets.token_hex(32)
+              password_file = state / 'admin.password'
+              password_file.write_text(admin_password)
+
+              def run(args, *, sql=None, password=None):
+                  env = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
+                  env['PGCONNECT_TIMEOUT'] = '5'
+                  if password is not None:
+                      env['PGPASSWORD'] = password
+                  result = subprocess.run([str(arg) for arg in args], input=sql,
+                                          text=True, capture_output=True, env=env, timeout=60)
+                  if result.returncode:
+                      raise SystemExit('STOP: native CI setup command failed; private diagnostics suppressed.')
+                  return result.stdout
+
+              run([pg/'initdb', '-D', data, '-U', 'sahha_ci_admin', '--encoding=UTF8',
+                   '--locale=C.UTF-8', '--auth-local=scram-sha-256', '--auth-host=scram-sha-256',
+                   '--pwfile', password_file])
+              with (data/'postgresql.conf').open('a') as config:
+                  config.write("\nlisten_addresses='127.0.0.1'\nport=15432\nunix_socket_directories=''\n"
+                               "max_connections=120\nshared_buffers='64MB'\nlog_statement='none'\n"
+                               "log_min_error_statement='panic'\nlog_error_verbosity='terse'\n")
+              run([pg/'pg_ctl', 'start', '-D', data, '-l', state/'postgres.log', '-w', '-t', '30'])
+
+              def psql(database, sql):
+                  return run([pg/'psql', '-X', '-h', '127.0.0.1', '-p', '15432',
+                              '-U', 'sahha_ci_admin', '-d', database, '-v', 'ON_ERROR_STOP=1'],
+                             sql=sql, password=admin_password)
+
+              properties = []
+              domains = 'auth organisation patient scheduling clinical communication notification file audit'.split()
+              for domain in domains:
+                  database = 'sahha_auth_test' if domain == 'auth' else 'sahha_' + domain
+                  username = 'sahha_' + domain + '_app'
+                  password = secrets.token_hex(32)
+                  psql('postgres', f"CREATE ROLE {username} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
+                       f"NOREPLICATION NOBYPASSRLS PASSWORD '{password}';\n"
+                       f"CREATE DATABASE {database} OWNER {username};\n"
+                       f"REVOKE ALL ON DATABASE {database} FROM PUBLIC;\n")
+                  psql(database, 'REVOKE CREATE ON SCHEMA public FROM PUBLIC;\n')
+                  if domain == 'scheduling':
+                      psql(database, 'CREATE EXTENSION IF NOT EXISTS btree_gist;\n')
+                  prefixes = [domain.upper() + '_DB']
+                  if domain == 'auth':
+                      prefixes.append('AUTH_TEST_DB')
+                  for prefix in prefixes:
+                      properties.extend([f'{prefix}_URL=jdbc:postgresql://127.0.0.1:15432/{database}',
+                                         f'{prefix}_USERNAME={username}', f'{prefix}_PASSWORD={password}'])
+              with Path('.env.database.local').open('x') as config:
+                  config.write('\n'.join(properties) + '\n')
+              (state/'created-env').touch()
+              run(['redis-server', '--bind', '127.0.0.1', '--port', '16379', '--protected-mode', 'yes',
+                   '--save', '', '--appendonly', 'no', '--dir', state, '--daemonize', 'yes',
+                   '--pidfile', state/'redis.pid', '--logfile', state/'redis.log'])
+              for attempt in range(50):
+                  result = subprocess.run(['redis-cli', '-h', '127.0.0.1', '-p', '16379', 'ping'],
+                                          text=True, capture_output=True, timeout=3)
+                  if result.returncode == 0 and result.stdout.strip() == 'PONG':
+                      break
+                  time.sleep(0.1)
+              else:
+                  raise SystemExit('STOP: isolated CI Redis did not become ready.')
+              print('PASS: disposable service-owned PostgreSQL test databases and Redis are ready.')
+              PY
+            displayName: Prepare disposable native PostgreSQL and Redis
+
+          - bash: |
+              set -euo pipefail
+              node scripts/sahha.mjs test tools
+            displayName: Test native project tooling
+
+          - bash: |
+              set -euo pipefail
+              bash ./mvnw --batch-mode --no-transfer-progress \
+                "-Dmaven.repo.local=$MAVEN_CACHE" '-DargLine=-Xmx512m' \
+                -Dspring.test.context.cache.maxSize=8 -Dsahha.test.redis.port=16379 clean verify
+            displayName: Test and package all backend modules
+            env:
+              MAVEN_CACHE: $(mavenCache)
+              MAVEN_OPTS: -Xmx512m
+              AUTH_TEST_REDIS_HOST: 127.0.0.1
+              AUTH_TEST_REDIS_PORT: '16379'
+
+          - task: PublishTestResults@2
+            displayName: Publish backend test results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: '**/target/surefire-reports/TEST-*.xml'
+              failTaskOnFailedTests: true
+              failTaskOnMissingResultsFile: true
+              testRunTitle: Java backend
+
+          - bash: |
+              set -euo pipefail
+              npm ci --no-audit --no-fund
+              npm test -- --maxWorkers=1 --reporter=default --reporter=junit --outputFile="$FRONTEND_JUNIT"
+              npm run build
+            workingDirectory: frontend
+            displayName: Test and build the React frontend
+            env:
+              npm_config_cache: $(npmCache)
+              FRONTEND_JUNIT: $(Agent.TempDirectory)/frontend-tests.xml
+              VITE_USE_MOCKS: 'false'
+              VITE_USE_AUTH_MOCKS: 'false'
+              VITE_API_BASE_URL: /api/v1
+              VITE_APP_NAME: Sahha
+
+          - task: PublishTestResults@2
+            displayName: Publish frontend test results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              searchFolder: $(Agent.TempDirectory)
+              testResultsFiles: frontend-tests.xml
+              failTaskOnFailedTests: true
+              failTaskOnMissingResultsFile: true
+              testRunTitle: React frontend
+
+          - bash: |
+              set -euo pipefail
+              python3 - <<'PY'
+              import hashlib
+              import json
+              import os
+              from pathlib import Path
+              import re
+              import shutil
+              import zipfile
+
+              commit = os.environ['BUILD_SOURCEVERSION']
+              build_id = os.environ['BUILD_BUILDID']
+              if not re.fullmatch(r'[0-9a-f]{40}', commit) or not re.fullmatch(r'[1-9][0-9]*', build_id):
+                  raise SystemExit('STOP: unexpected build identity.')
+              release_id = f'b{build_id}-{commit[:12]}'
+              release = Path(os.environ['BUILD_ARTIFACTSTAGINGDIRECTORY']) / 'sahha-release'
+              release.mkdir(parents=True, exist_ok=False)
+              modules = ['discovery-server', 'config-server', 'api-gateway']
+              modules += [name + '-service' for name in
+                          'auth organisation patient scheduling clinical communication notification file audit'.split()]
+
+              def copy_file(source, relative):
+                  if source.is_symlink() or not source.is_file():
+                      raise SystemExit('STOP: a release input is not a regular file.')
+                  target = release / relative
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(source, target)
+
+              for module in modules:
+                  jars = [p for p in (Path(module)/'target').glob('*.jar')
+                          if not p.name.endswith(('-sources.jar', '-javadoc.jar', '-tests.jar'))]
+                  if len(jars) != 1:
+                      raise SystemExit(f'STOP: expected one executable JAR for {module}.')
+                  with zipfile.ZipFile(jars[0]) as jar:
+                      manifest = jar.read('META-INF/MANIFEST.MF').decode('utf-8')
+                      if 'Main-Class: org.springframework.boot.loader.launch.JarLauncher' not in manifest or 'Start-Class: com.sahha.' not in manifest:
+                          raise SystemExit(f'STOP: {module} is not an executable Sahha application.')
+                      if any(name.startswith('BOOT-INF/classes/') and
+                             (Path(name).name.startswith('.env') or Path(name).suffix.lower() in ('.pem', '.key', '.p12', '.pfx'))
+                             for name in jar.namelist()):
+                          raise SystemExit('STOP: credential-like resource found in application JAR.')
+                  copy_file(jars[0], Path('backend') / (module + '.jar'))
+              frontend = Path('frontend/dist')
+              if frontend.is_symlink() or not (frontend/'index.html').is_file():
+                  raise SystemExit('STOP: frontend production build is missing.')
+              allowed = {'.html', '.js', '.css', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.ico', '.woff', '.woff2', '.ttf', '.txt', '.json'}
+              for path in sorted(frontend.rglob('*')):
+                  if path.is_symlink():
+                      raise SystemExit('STOP: frontend build contains a symbolic link.')
+                  if path.is_file():
+                      if any(part.startswith('.') for part in path.relative_to(frontend).parts) or path.suffix.lower() not in allowed:
+                          raise SystemExit('STOP: unexpected file type in frontend production build.')
+                      copy_file(path, Path('frontend') / path.relative_to(frontend))
+              files = []
+              for path in sorted(release.rglob('*')):
+                  if path.is_file():
+                      files.append({'path': path.relative_to(release).as_posix(),
+                                    'size': path.stat().st_size, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+              manifest = {'schema': 'sahha-release-v1', 'release_id': release_id,
+                          'source_commit': commit, 'source_branch': os.environ['BUILD_SOURCEBRANCH'],
+                          'build_id': build_id, 'files': files}
+              (release/'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+              print(f'PASS: {release_id}: twelve backend JARs, production frontend and SHA-256 manifest.')
+              PY
+            displayName: Assemble frontend and backend release with checksums
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish tested Sahha release
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), in(variables['Build.SourceBranch'], 'refs/heads/main', 'refs/heads/feature/organisation-service'))
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/sahha-release
+              artifact: sahha-release
+
+          - bash: |
+              python3 - <<'PY'
+              import os
+              from pathlib import Path
+              import socket
+              import subprocess
+
+              if os.name != 'posix' or os.environ.get('TF_BUILD') != 'True' or socket.gethostname().split('.')[0] == 'sahha-demo-vm':
+                  raise SystemExit('STOP: CI cleanup refused on this host.')
+              state = Path(os.environ['AGENT_TEMPDIRECTORY']) / 'sahha-ci'
+              failed = False
+              commands = []
+              if (state/'postgres/postmaster.pid').exists():
+                  commands.append(['/usr/lib/postgresql/16/bin/pg_ctl', 'stop', '-D', str(state/'postgres'), '-m', 'fast', '-w', '-t', '30'])
+              if (state/'redis.pid').exists():
+                  commands.append(['redis-cli', '-h', '127.0.0.1', '-p', '16379', 'shutdown', 'nosave'])
+              for command in commands:
+                  result = subprocess.run(command, capture_output=True, timeout=45)
+                  failed = failed or result.returncode != 0
+              if (state/'created-env').exists():
+                  Path('.env.database.local').unlink(missing_ok=True)
+              if failed:
+                  raise SystemExit('STOP: disposable CI service cleanup failed; diagnostics suppressed.')
+              print('Disposable CI services stopped and generated connection file removed.')
+              PY
+            displayName: Stop disposable CI services
+            condition: always()
+
+  # This stage is absent on the first run. Enable only after the VM release helper,
+  # public origin and HTTPS publication prerequisites are installed and reviewed.
+  - ${{ if eq(parameters.deployToDemo, true) }}:
+    - stage: DeployDemo
+      displayName: Activate tested release on Sahha demo
+      dependsOn: Build
+      condition: and(succeeded(), eq(variables['Build.Reason'], 'Manual'), in(variables['Build.SourceBranch'], 'refs/heads/main', 'refs/heads/feature/organisation-service'))
+      jobs:
+        - deployment: ActivateDemo
+          displayName: Deploy frontend and backend to the demo VM
+          timeoutInMinutes: 25
+          environment:
+            name: sahha-demo
+            resourceType: virtualMachine
+            resourceName: sahha-demo-vm
+          strategy:
+            runOnce:
+              deploy:
+                steps:
+                  - checkout: none
+                  - download: none
+                  - download: current
+                    artifact: sahha-release
+                  - bash: |
+                      set -euo pipefail
+                      python3 - <<'PY'
+                      import hashlib
+                      import json
+                      import os
+                      from pathlib import Path, PurePosixPath
+                      import pwd
+                      import re
+                      import shutil
+                      import socket
+                      import stat
+                      import subprocess
+
+                      def validate_release(root, commit, build_id):
+                          if root.is_symlink() or not root.is_dir():
+                              raise ValueError('Artifact directory is missing or unsafe.')
+                          paths = list(root.rglob('*'))
+                          if any(path.is_symlink() for path in paths):
+                              raise ValueError('Symbolic links are not release files.')
+                          actual = {path.relative_to(root).as_posix() for path in paths if path.is_file()}
+                          if any(not path.is_dir() and not path.is_file() for path in paths):
+                              raise ValueError('Special release files are forbidden.')
+                          manifest = json.loads((root/'manifest.json').read_text(encoding='utf-8'))
+                          release_id = f'b{build_id}-{commit[:12]}'
+                          if (not isinstance(manifest, dict) or manifest.get('schema') != 'sahha-release-v1' or manifest.get('source_commit') != commit
+                              or manifest.get('build_id') != build_id or manifest.get('release_id') != release_id
+                              or manifest.get('source_branch') != os.environ['BUILD_SOURCEBRANCH']):
+                              raise ValueError('Release provenance differs from this pipeline run.')
+                          expected = {'manifest.json'}
+                          modules = ['discovery-server', 'config-server', 'api-gateway']
+                          modules += [name + '-service' for name in 'auth organisation patient scheduling clinical communication notification file audit'.split()]
+                          backend = {'backend/' + module + '.jar' for module in modules}
+                          allowed = {'.html', '.js', '.css', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.ico', '.woff', '.woff2', '.ttf', '.txt', '.json'}
+                          if not isinstance(manifest.get('files'), list):
+                              raise ValueError('Release file list is invalid.')
+                          for entry in manifest['files']:
+                              if not isinstance(entry, dict) or not isinstance(entry.get('path'), str):
+                                  raise ValueError('Release file entry is invalid.')
+                              name = entry['path']
+                              relative = PurePosixPath(name)
+                              if (not isinstance(name, str) or not name or '\\' in name or relative.is_absolute()
+                                  or '..' in relative.parts or relative.as_posix() != name or name in expected
+                                  or not (name in backend or name.startswith('frontend/'))):
+                                  raise ValueError('Unexpected, duplicate or unsafe release path.')
+                              if name.startswith('frontend/') and (any(part.startswith('.') for part in relative.parts)
+                                                                 or relative.suffix.lower() not in allowed):
+                                  raise ValueError('Unexpected frontend file type or hidden path.')
+                              path = root.joinpath(*relative.parts)
+                              if path.stat().st_size != entry['size'] or hashlib.sha256(path.read_bytes()).hexdigest() != entry['sha256']:
+                                  raise ValueError('Release checksum or size mismatch.')
+                              expected.add(name)
+                          if actual != expected or not backend.issubset(expected) or 'frontend/index.html' not in expected:
+                              raise ValueError('Release is incomplete or contains unlisted files.')
+                          return release_id
+
+                      def main():
+                          if socket.gethostname().split('.')[0] != 'sahha-demo-vm' or pwd.getpwuid(os.geteuid()).pw_name != 'sahha-deploy':
+                              raise ValueError('Deployment requires the named VM and restricted agent account.')
+                          commit, build_id = os.environ['BUILD_SOURCEVERSION'], os.environ['BUILD_BUILDID']
+                          if not re.fullmatch(r'[0-9a-f]{40}', commit) or not re.fullmatch(r'[1-9][0-9]*', build_id):
+                              raise ValueError('Unexpected build identity.')
+                          helper = Path('/usr/local/sbin/sahha-release')
+                          if helper.is_symlink() or not helper.is_file():
+                              raise ValueError('Install the reviewed VM release helper before enabling deployment.')
+                          info = helper.stat()
+                          if info.st_uid != 0 or info.st_mode & 0o022 or not info.st_mode & stat.S_IXUSR:
+                              raise ValueError('VM release helper ownership or permissions are unsafe.')
+                          source = Path(os.environ['PIPELINE_WORKSPACE'])/'sahha-release'
+                          release_id = validate_release(source, commit, build_id)
+                          staging = Path('/var/lib/sahha-deploy/staging')
+                          if staging.is_symlink() or not staging.is_dir() or staging.stat().st_uid != os.geteuid():
+                              raise ValueError('Deployment staging directory is unsafe.')
+                          target = staging/release_id
+                          if target.exists() or target.is_symlink():
+                              if validate_release(target, commit, build_id) != release_id:
+                                  raise ValueError('Existing staging release differs.')
+                          else:
+                              shutil.copytree(source, target)
+                              validate_release(target, commit, build_id)
+                          subprocess.run(['sudo', '-n', str(helper), 'activate', release_id], check=True, timeout=1200)
+
+                      if __name__ == '__main__':
+                          try:
+                              main()
+                          except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+                              raise SystemExit('STOP: release staging/activation failed; review prerequisites and release checks. Credentials and raw diagnostics suppressed.')
+                      PY
+                    displayName: Verify, stage and activate the tested release
