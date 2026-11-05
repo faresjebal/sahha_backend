@@ -31,15 +31,16 @@ task.
 
 Current phase: `Phase 8 — Project showcase and patient onboarding`
 
-Current next task: finish the repository About edit after browser sign-in,
-then manually deploy the latest feature/organisation-service commit (which
-includes the tested onboarding fix) and verify the new-patient view.
+Current next task: manually deploy the latest feature/organisation-service
+commit with deployToDemo=true, then verify the newly signed-in patient view.
 
 2026-11-05 project showcase: the root README now presents the product, roles,
 architecture and native setup, with a real application preview and the finished
 four-minute English/French video exports. docs/DEMO.md provides chapters and
 media provenance. Branch publication does not activate a VM release. The About
-settings edit awaits browser sign-in; no private data or credentials are added.
+settings edit is complete through authenticated Brave. GitHub's API confirms the
+exact description, public HTTPS application URL and all eight topics. No private
+data or credentials are added.
 
 2026-11-05 new-patient onboarding correction:
 The deployed Auth mail configuration passed SMTP TLS/login, Auth restart and
@@ -3207,6 +3208,18 @@ Use this checklist after every task:
 7. Add a dated change-log entry below.
 
 ## 16. Change log
+
+### 2026-11-05 - Complete the GitHub repository About details
+
+- Used the user-authenticated Brave connection to save the prepared project
+  description, live HTTPS application URL and eight technology/product topics.
+- Independently verified the exact description, homepage and complete topic
+  set through GitHub's repository metadata API; the About panel displays them.
+- The README, architecture diagram and bilingual demonstration videos remain
+  published on feature/organisation-service. This operation changes repository
+  presentation metadata and its tracker; no VM release is activated.
+- Next: manually deploy the latest branch with deployToDemo=true and verify the
+  newly signed-in patient onboarding view.
 
 ### 2026-11-05 - Publish the project overview and bilingual demonstration
 
