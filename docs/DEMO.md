@@ -6,15 +6,14 @@ organisation administrator, receptionist, doctor and patient.
 
 | Language | Video | Duration |
 | --- | --- | --- |
-| English | [Watch or download the MP4](media/sahha-demo-en.mp4) | 4 minutes |
-| Français | [Voir ou télécharger le MP4](media/sahha-demo-fr.mp4) | 4 minutes |
+| English | [Download the MP4](https://github.com/faresjebal/sahha_backend/raw/refs/heads/feature/organisation-service/docs/media/sahha-demo-en.mp4) | 4 minutes |
+| Français | [Télécharger le MP4](https://github.com/faresjebal/sahha_backend/raw/refs/heads/feature/organisation-service/docs/media/sahha-demo-fr.mp4) | 4 minutes |
 
-[![Sahha doctor availability workspace](media/demo-preview.jpg)](media/sahha-demo-en.mp4)
+[![Sahha doctor availability workspace](media/demo-preview.jpg)](https://github.com/faresjebal/sahha_backend/raw/refs/heads/feature/organisation-service/docs/media/sahha-demo-en.mp4)
 
 These are the finished presentation edits slowed to half speed for readability.
-Each is H.264, 1920 × 1080, 25 fps, with on-screen captions. Open the MP4 through
-GitHub's file viewer or download it to play locally. If you clone the repository,
-the files are available directly under `docs/media/`.
+Each is H.264, 1920 × 1080, 25 fps, with on-screen captions. Use the direct links above to download and play the MP4 locally. If you clone
+the repository, the files are available directly under `docs/media/`.
 
 ## Chapters
 

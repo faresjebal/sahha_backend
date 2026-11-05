@@ -3217,6 +3217,8 @@ Use this checklist after every task:
   a genuine application preview, and a chapter guide under docs/DEMO.md.
 - Verified both media SHA-256 values against the original exports, their
   240-second H.264/1080p/25-fps metadata and the uploaded Git blob identities.
+- Verified the rendered GitHub README and preview. Direct MP4 download links
+  avoid GitHub's large-binary file-viewer limit.
 - Documentation/media publication preserves the existing onboarding fix and
   does not activate a VM release. No account or private configuration is added.
 - Repository About description is prepared; its settings editor requires

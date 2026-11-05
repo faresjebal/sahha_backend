@@ -10,13 +10,14 @@ opinion, with explicit boundaries around who can see each record.
 **Java 21 · Spring Boot · Spring Cloud · React · TypeScript · PostgreSQL · Kafka · Azure**
 
 [Open the live application](https://sahha-demo-fares.spaincentral.cloudapp.azure.com)
-&nbsp;·&nbsp; [Watch the English demo](docs/media/sahha-demo-en.mp4)
-&nbsp;·&nbsp; [Voir la démo en français](docs/media/sahha-demo-fr.mp4)
+&nbsp;·&nbsp; [Download the English demo](https://github.com/faresjebal/sahha_backend/raw/refs/heads/feature/organisation-service/docs/media/sahha-demo-en.mp4)
+&nbsp;·&nbsp; [Télécharger la démo en français](https://github.com/faresjebal/sahha_backend/raw/refs/heads/feature/organisation-service/docs/media/sahha-demo-fr.mp4)
 
-[![Sahha doctor workspace — open the application demonstration](docs/media/demo-preview.jpg)](docs/media/sahha-demo-en.mp4)
+[![Sahha doctor workspace — download the application demonstration](docs/media/demo-preview.jpg)](https://github.com/faresjebal/sahha_backend/raw/refs/heads/feature/organisation-service/docs/media/sahha-demo-en.mp4)
 
 Both captioned walkthroughs run for **4 minutes** at a slower pace for easier
-viewing. They show the deployed application using synthetic accounts and patient
+viewing. Download either MP4 to watch it locally. They show the deployed application
+using synthetic accounts and patient
 data. [Demo guide and chapter timings →](docs/DEMO.md)
 
 ## Why Sahha?
@@ -128,9 +129,9 @@ release, and activates it through the VM deployment agent.
 
 ## Explore the live demo
 
-Open **[Sahha](https://sahha-demo-fares.spaincentral.cloudapp.azure.com)** or watch
-the [English](docs/media/sahha-demo-en.mp4) /
-[French](docs/media/sahha-demo-fr.mp4) walkthrough.
+Open **[Sahha](https://sahha-demo-fares.spaincentral.cloudapp.azure.com)** or download
+the [English](https://github.com/faresjebal/sahha_backend/raw/refs/heads/feature/organisation-service/docs/media/sahha-demo-en.mp4) /
+[French](https://github.com/faresjebal/sahha_backend/raw/refs/heads/feature/organisation-service/docs/media/sahha-demo-fr.mp4) walkthrough.
 
 Public signup creates a patient login and requires email verification. Booking
 also requires a clinic patient registration connected with clinic-issued details.
