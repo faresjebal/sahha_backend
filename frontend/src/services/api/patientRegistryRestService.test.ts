@@ -6,6 +6,7 @@ import type {
 } from '../../models/patient'
 import { httpClient } from './httpClient'
 import { patientRegistryRestService } from './patientRegistryRestService'
+import { ApiError } from './ApiError'
 
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -72,6 +73,34 @@ describe('Gateway patient registry REST integration', () => {
   beforeEach(() => {
     httpClient.invalidateCsrfToken()
     vi.restoreAllMocks()
+  })
+
+  it('treats the precise missing account link as an empty list for a new identity', async () => {
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(response({
+      type:'urn:sahha:problem:patient-account-link-not-found',
+      title:'Patient account link not found',status:404,
+      detail:'The verified account could not be matched to an owned patient registration.',
+    },404)))
+    await expect(patientRegistryRestService.listMyRegistrations()).resolves.toEqual([])
+  })
+
+  it.each([401,403,404,503])('preserves an unrelated HTTP %s failure instead of creating an empty portal', async status => {
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(response({
+      type:'urn:sahha:problem:other-failure',title:'Request failed',status,
+      detail:'An actual failure',
+    },status)))
+    await expect(patientRegistryRestService.listMyRegistrations()).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('does not convert a failed explicit record-link operation into an empty-list success', async () => {
+    vi.spyOn(httpClient,'request').mockRejectedValue(new ApiError({
+      type:'urn:sahha:problem:patient-account-link-not-found',
+      title:'Patient account link not found',status:404,
+      detail:'The registration could not be matched.',
+    }))
+    await expect(patientRegistryRestService.linkMyAccount({
+      organisationId:'organisation-1',medicalRecordNumber:'PT-12AB34CD56EF',dateOfBirth:'1990-04-12',
+    })).rejects.toBeInstanceOf(ApiError)
   })
 
   it('searches the tenant directory and reads a registration through Gateway', async () => {

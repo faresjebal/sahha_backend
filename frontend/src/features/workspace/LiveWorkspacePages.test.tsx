@@ -9,7 +9,10 @@ import { communicationRestService } from '../../services/api/communicationRestSe
 import { organisationRestService } from '../../services/api/organisationRestService'
 import { departmentRestService } from '../../services/api/departmentRestService'
 import { staffDirectoryRestService } from '../../services/api/staffDirectoryRestService'
-import { DoctorOverviewPage, DoctorPatientsPage, OrganisationOverviewPage, PlatformAccountsPage, UnavailablePage } from './LiveWorkspacePages'
+import { patientRegistryRestService } from '../../services/api/patientRegistryRestService'
+import { availabilityRestService } from '../../services/api/availabilityRestService'
+import { ApiError } from '../../services/api/ApiError'
+import { DoctorOverviewPage, DoctorPatientsPage, OrganisationOverviewPage, PatientWorkspacePage, PlatformAccountsPage, UnavailablePage } from './LiveWorkspacePages'
 import type { AppointmentResource } from '../../models/scheduling'
 import { OwnProfilePage, OrganisationSettingsPage } from './ProfilePages'
 
@@ -22,6 +25,27 @@ function show(node:ReactNode) {
 }
 beforeEach(() => { vi.spyOn(accountRestService, 'me').mockResolvedValue(account) })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
+
+it.each(['overview','doctors'] as const)('gives an unlinked new patient a clear %s starting point without querying other patients', async mode => {
+  vi.spyOn(patientRegistryRestService,'listMyRegistrations').mockResolvedValue([])
+  const doctors=vi.spyOn(availabilityRestService,'listMyPatientDoctors')
+  const visits=vi.spyOn(appointmentRestService,'listMine')
+  show(<PatientWorkspacePage mode={mode}/>)
+  expect(await screen.findByText('Your account is ready')).toBeInTheDocument()
+  expect(screen.getByText(/your clinic needs to register you before you can request appointments/i)).toBeInTheDocument()
+  expect(screen.getByRole('link',{name:'Connect a clinic record'})).toHaveAttribute('href','/patient/appointments')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(doctors).not.toHaveBeenCalled();expect(visits).not.toHaveBeenCalled()
+})
+
+it('keeps a failed patient lookup visible instead of showing a ready account', async () => {
+  vi.spyOn(patientRegistryRestService,'listMyRegistrations').mockRejectedValue(new ApiError({
+    type:'urn:sahha:problem:service-unavailable',title:'Service unavailable',status:503,detail:'Patient service unavailable.',
+  }))
+  show(<PatientWorkspacePage mode="overview"/>)
+  expect(await screen.findByRole('alert')).toHaveTextContent('Patient service unavailable.')
+  expect(screen.queryByText('Your account is ready')).not.toBeInTheDocument()
+})
 
 it('loads real overview counts and refetches the selected day without demo fallback', async () => {
   const list = vi.spyOn(appointmentRestService, 'list').mockResolvedValue([])

@@ -1,6 +1,6 @@
 # Sahha internship implementation plan
 
-Last updated: 2026-09-28
+Last updated: 2026-11-05
 
 Status values: `NOT STARTED`, `IN PROGRESS`, `BLOCKED`, `COMPLETE`
 
@@ -31,8 +31,25 @@ task.
 
 Current phase: `Phase 6 — Messaging, referral, and selected sharing`
 
-Current next task: investigate the failed live acceptance run and complete the
-single-session gate, including booking retries and both doctors' new treatment.
+Current next task: run the manual Azure release for the tested new-patient
+onboarding correction, then verify the first signed-in patient view.
+
+2026-11-05 new-patient onboarding correction:
+The deployed Auth mail configuration passed SMTP TLS/login, Auth restart and
+readiness checks. A newly verified patient account then reached the Patient
+Service account-link-not-found response. The own-registration list legitimately
+has no clinic record for such an identity; the frontend now maps only its exact
+404 problem type to an empty list and presents a clear starting page.
+
+Explicit account linking, scheduling contexts and protected patient reads keep
+their backend ownership checks. Other 401/403/404/503 responses remain errors.
+No clinic registration or clinical access is created automatically. A clinic
+must register a patient before that patient can request appointments there.
+
+Local validation: 27 targeted frontend tests and the TypeScript/production build
+passed. The change is prepared for the existing manual Azure pipeline with
+deployToDemo=true; hosted verification and deployed UI acceptance remain to run.
+See docs/PATIENT_ACCOUNT_ONBOARDING.md for the boundary and deployment steps.
 
 2026-09-28 publication checkpoint: the user requested publishing the current
 frontend and backend source. Use the existing backend
@@ -3183,6 +3200,15 @@ Use this checklist after every task:
 7. Add a dated change-log entry below.
 
 ## 16. Change log
+
+### 2026-11-05 - Handle a verified patient without a clinic registration
+
+- Map only the precise own-registration-list missing-link 404 to an empty list.
+- Show clinic-registration guidance on the patient overview and doctor search.
+- Preserve explicit record-link and protected-resource authorization failures.
+- Verified 27 targeted tests and a local production build.
+- Next: manual hosted verification/deployment and real new-account UI acceptance.
+
 
 ### 2026-09-28 — Frontend and backend source publication checkpoint
 
