@@ -29,10 +29,17 @@ task.
 | 7 | Limited patient portal, audit completion, security hardening, and observability | IN PROGRESS |
 | 8 | Full end-to-end verification, CI/CD foundation, and internship demonstration | IN PROGRESS |
 
-Current phase: `Phase 6 — Messaging, referral, and selected sharing`
+Current phase: `Phase 8 — Project showcase and patient onboarding`
 
-Current next task: run the manual Azure release for the tested new-patient
-onboarding correction, then verify the first signed-in patient view.
+Current next task: finish the repository About edit after browser sign-in,
+then manually deploy the latest feature/organisation-service commit (which
+includes the tested onboarding fix) and verify the new-patient view.
+
+2026-11-05 project showcase: the root README now presents the product, roles,
+architecture and native setup, with a real application preview and the finished
+four-minute English/French video exports. docs/DEMO.md provides chapters and
+media provenance. Branch publication does not activate a VM release. The About
+settings edit awaits browser sign-in; no private data or credentials are added.
 
 2026-11-05 new-patient onboarding correction:
 The deployed Auth mail configuration passed SMTP TLS/login, Auth restart and
@@ -3200,6 +3207,23 @@ Use this checklist after every task:
 7. Add a dated change-log entry below.
 
 ## 16. Change log
+
+### 2026-11-05 - Publish the project overview and bilingual demonstration
+
+- Reworked the root README around the clinic problem, five user roles, the
+  patient journey, a service architecture diagram, security boundaries and
+  native setup commands.
+- Added the finished four-minute English and French presentation videos,
+  a genuine application preview, and a chapter guide under docs/DEMO.md.
+- Verified both media SHA-256 values against the original exports, their
+  240-second H.264/1080p/25-fps metadata and the uploaded Git blob identities.
+- Documentation/media publication preserves the existing onboarding fix and
+  does not activate a VM release. No account or private configuration is added.
+- Repository About description is prepared; its settings editor requires
+  browser sign-in because the connected tool has no administration mutation.
+- Next: complete the About edit when GitHub browser sign-in is available, then
+  run the latest branch through the existing manual Azure deployment and check
+  the new-patient view.
 
 ### 2026-11-05 - Handle a verified patient without a clinic registration
 

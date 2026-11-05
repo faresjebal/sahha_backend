@@ -1,197 +1,159 @@
 # Sahha
 
-Sahha is a secure healthcare management and collaboration platform. This
-repository is focused on the internship Version 1 and its complete patient
-journey.
+### Healthcare workflows. Connected care. Controlled access.
 
-Read before implementing:
+Sahha brings clinic administration, appointments, clinical records and doctor
+collaboration into one application. Built as an engineering internship project,
+it follows the patient journey from reception to consultation and a second
+opinion, with explicit boundaries around who can see each record.
 
-- `docs/PROJECT_CONTEXT.md`
-- `docs/INTERNSHIP_PLAN.md`
-- `docs/AUTH_IMPLEMENTATION_PLAN.md`
-- `docs/GATEWAY_AUTH_GUIDE.md`
-- `docs/FRONTEND_AUTH_GUIDE.md`
-- `docs/BACKEND_PACKAGE_STRUCTURE.md`
-- `AGENTS.md`
+**Java 21 · Spring Boot · Spring Cloud · React · TypeScript · PostgreSQL · Kafka · Azure**
 
-## Repository structure
+[Open the live application](https://sahha-demo-fares.spaincentral.cloudapp.azure.com)
+&nbsp;·&nbsp; [Watch the English demo](docs/media/sahha-demo-en.mp4)
+&nbsp;·&nbsp; [Voir la démo en français](docs/media/sahha-demo-fr.mp4)
 
-```text
-discovery-server/      Eureka service discovery
-config-server/         Externalised configuration
-api-gateway/           Public backend entry point
-auth-service/          Accounts and authentication
-organisation-service/ Organisations, departments, and memberships
-patient-service/       Administrative patient registry
-scheduling-service/    Availability and appointments
-clinical-service/      Consultations and clinical records
-communication-service/ Messages, referrals, and sharing
-notification-service/ In-app and real-time notifications
-file-service/          Protected medical files
-audit-service/         Append-only audit foundation
-frontend/              React and TypeScript application
-docs/                  Product context and living implementation plan
-infrastructure/        Ignored native runtime state and local configuration
-scripts/               Native developer commands and performance checks
+[![Sahha doctor workspace — open the application demonstration](docs/media/demo-preview.jpg)](docs/media/sahha-demo-en.mp4)
+
+Both captioned walkthroughs run for **4 minutes** at a slower pace for easier
+viewing. They show the deployed application using synthetic accounts and patient
+data. [Demo guide and chapter timings →](docs/DEMO.md)
+
+## Why Sahha?
+
+A clinic's administrative work and its clinical work are closely connected, but
+they require different access. Reception needs to organise a visit; a doctor
+needs the relevant clinical history; another doctor may need only one selected
+diagnosis for a second opinion.
+
+Sahha connects those workflows through organisation-scoped roles, service-owned
+data and explicit, revocable sharing.
+
+## One application, five user roles
+
+| Role | Main workflow |
+| --- | --- |
+| Platform administrator | Create healthcare organisations and assign their administrators. |
+| Organisation administrator | Configure departments and manage staff memberships and invitations. |
+| Receptionist | Register patients, check duplicates, book visits and manage check-in. |
+| Doctor | Publish availability, conduct consultations, message colleagues and manage referrals. |
+| Patient | Verify an account, connect a clinic registration, find doctors and track appointments. |
+
+A single identity can belong to several organisations. Each action is checked
+against the active organisation, current membership and the requested resource.
+
+## The patient journey
+
+1. **Prepare the clinic** — create the organisation, departments and staff.
+2. **Arrange the visit** — publish availability, register the patient, request
+   and confirm an appointment, then check the patient in.
+3. **Document care** — record the consultation, diagnosis and treatment;
+   finalisation locks the record and corrections remain attributable.
+4. **Collaborate with consent** — message another doctor and share selected
+   information through a referral with an explicit scope.
+5. **Control access over time** — accept, revoke or expire the sharing grant;
+   protected reads follow the current access decision.
+
+Private file uploads, in-app notifications and a limited patient portal support
+the same journey.
+
+## Architecture
+
+The repository contains the React frontend and **12 independently runnable
+Spring Boot applications**. The browser uses the API Gateway; each stateful
+service owns its PostgreSQL database and migrations.
+
+```mermaid
+flowchart TB
+    UI["React + TypeScript"]
+    Edge["Nginx · HTTPS"]
+    Gateway["Spring Cloud Gateway"]
+    Identity["Auth · Organisation"]
+    Care["Patient · Scheduling · Clinical"]
+    Collaboration["Communication · Notification · File"]
+    Audit["Audit persistence"]
+    Foundation["Eureka discovery · Config Server"]
+    PG[("PostgreSQL · service-owned databases")]
+    Kafka["Kafka · domain events"]
+    Redis["Redis · sessions and messaging"]
+    Storage["SeaweedFS · private S3 storage"]
+
+    UI --> Edge --> Gateway
+    Gateway --> Identity
+    Gateway --> Care
+    Gateway --> Collaboration
+    Identity --> PG
+    Care --> PG
+    Collaboration --> PG
+    Audit --> PG
+    Care <--> Kafka
+    Collaboration <--> Kafka
+    Identity --> Redis
+    Collaboration --> Redis
+    Collaboration --> Storage
+    Foundation -. discovery and configuration .-> Gateway
 ```
 
-All backend applications are independent Spring Boot Maven modules aggregated
-by the root `pom.xml`.
+| Layer | Technologies and responsibilities |
+| --- | --- |
+| Frontend | React, TypeScript, Vite, React Router and TanStack Query |
+| Backend | Java 21, Spring Boot, Spring Security and Spring Cloud |
+| Persistence | PostgreSQL, Flyway and independent service credentials |
+| Events and live updates | Kafka and WebSocket notifications |
+| Cache and storage | Redis and SeaweedFS with an S3-compatible API |
+| Delivery | Azure Pipelines, an Ubuntu Azure VM, systemd, Nginx and Let's Encrypt |
 
-## Current commands
+The deployed application runs as native Java services on a single demonstration
+VM. The pipeline tests and builds both frontend and backend, packages a checked
+release, and activates it through the VM deployment agent.
 
-The workflow is Docker-free. Read
-[`docs/NATIVE_DEVELOPMENT.md`](docs/NATIVE_DEVELOPMENT.md) for prerequisites,
-safe process ownership, event switches and Azure preparation.
+## Security by design
+
+- **Organisation and resource checks:** a role alone does not grant access to
+  every patient record.
+- **Session-aware authentication:** JWT validation is combined with an
+  Auth-owned session decision; browser state-changing requests use CSRF protection.
+- **Clinical boundaries:** administrative membership and private messaging do
+  not grant clinical access.
+- **Explicit sharing:** referrals record consent and scope; revocation and expiry
+  remove shared access.
+- **Private documents:** file reads require authorisation and scan-state checks;
+  download access is short lived.
+- **Traceable records:** finalised clinical records are immutable, with
+  attributable corrections and service-local audit records.
+
+[Session security](docs/SESSION_SECURITY.md) ·
+[Permission model](docs/BACKEND_PERMISSIONS.md) ·
+[Health and readiness](docs/HEALTH_READINESS.md)
+
+## Explore the live demo
+
+Open **[Sahha](https://sahha-demo-fares.spaincentral.cloudapp.azure.com)** or watch
+the [English](docs/media/sahha-demo-en.mp4) /
+[French](docs/media/sahha-demo-fr.mp4) walkthrough.
+
+Public signup creates a patient login and requires email verification. Booking
+also requires a clinic patient registration connected with clinic-issued details.
+Staff and administrator roles are assigned through the organisation workflow.
+The video shows those role-specific journeys without publishing credentials.
+
+## Run locally
+
+The native development workflow uses Java 21, Node.js/npm, PostgreSQL,
+Redis-compatible caching, Kafka and SeaweedFS. Start with the
+[native setup guide](docs/NATIVE_DEVELOPMENT.md) to configure the service-owned
+databases and private environment files.
+
+From the repository root, in PowerShell:
 
 ```powershell
 node scripts/sahha.mjs check
 node scripts/sahha.mjs build backend
-node scripts/sahha.mjs start foundation
+node scripts/sahha.mjs start all
 node scripts/sahha.mjs status
-node scripts/sahha.mjs stop
 ```
 
-Use `start all` for all backend applications or explicit service names. Root
-`test backend`, `test frontend`, `test tools` and `build frontend` are also
-available. Only launcher-owned processes are controlled; data is never reset.
-
-The separate [synthetic development bootstrap](docs/SYNTHETIC_BOOTSTRAP.md) creates
-nine isolated PostgreSQL databases on loopback port `15432` and validates their
-service-owned migrations. Its explicitly confirmed reset creates a new generation
-and retains the old data; it never resets development databases on `5432`.
-Repeatable synthetic account/staff, patient/appointment, clinical and messaging
-REST/Kafka checks, protected-file recovery/fresh upload, isolated Redis/Kafka/
-SeaweedFS restart checks and all twelve application smoke checks now pass.
-Temporary helpers shut down automatically. The full referral/browser demonstration
-and clean-machine acceptance remain tracked work; see the guide for per-gate evidence.
-
-For the ordered temporary demo, configure the installed native paths in
-[the setup guide](docs/SYNTHETIC_BOOTSTRAP.md#ordered-setup-from-installed-prerequisites),
-then run `node scripts/synthetic-setup.mjs check` and
-`node scripts/synthetic-setup.mjs run`. Preflight is read-only; the fixed sequence
-reuses or initialises only isolated synthetic data, checks retained identities and
-stops owned helpers between stages. It never installs software or resets data.
-The retained-data sequence passed all 16 stages on 2026-09-20, with all temporary
-services stopped. Fresh-checkout/empty-generation and clean-machine acceptance
-remain open; this does not certify Azure readiness.
-
-Run all backend module tests:
-
-```powershell
-.\mvnw.cmd test
-```
-
-Run Auth with its local PostgreSQL and SMTP configuration:
-
-```powershell
-.\mvnw.cmd -pl auth-service spring-boot:run "-Dspring-boot.run.profiles=local"
-```
-
-Then open `http://localhost:8081/swagger-ui.html`. The complete manual endpoint
-sequence and expected responses are in
-[`docs/AUTH_SWAGGER_GUIDE.md`](docs/AUTH_SWAGGER_GUIDE.md).
-
-Run Organisation Service against its local PostgreSQL database:
-
-```powershell
-.\mvnw.cmd -pl organisation-service spring-boot:run "-Dspring-boot.run.profiles=local"
-```
-
-Then open `http://localhost:8082/swagger-ui.html`. The current
-Platform-Administrator create/list/read flow, role bootstrap note, CSRF steps,
-and expected denials are in
-[`docs/ORGANISATION_SWAGGER_GUIDE.md`](docs/ORGANISATION_SWAGGER_GUIDE.md).
-
-For the browser-facing flow, also start Discovery and Gateway. The frontend
-calls Auth through Gateway on port `8079`; the start order, routes, cookies,
-CSRF flow, security boundaries, and verified commands are in
-[`docs/GATEWAY_AUTH_GUIDE.md`](docs/GATEWAY_AUTH_GUIDE.md).
-The registration, email-verification, login, refresh, and logout walkthrough
-is in [`docs/FRONTEND_AUTH_GUIDE.md`](docs/FRONTEND_AUTH_GUIDE.md).
-
-Auth uses the native Memurai Windows service as its disposable local
-Redis-compatible session cache, so Docker Desktop and WSL do not need to run.
-Verification, optional Redis Insight setup and environment variables are in
-[`docs/LOCAL_REDIS.md`](docs/LOCAL_REDIS.md). Auth continues to use PostgreSQL
-if the cache is unavailable.
-
-Gateway and implemented resource services now require a fresh Auth-owned session
-decision after local JWT validation, including direct-service requests. This
-uses the non-deployable `session-security` module. Internal address configuration,
-outage behavior and WebSocket enforcement are documented in
-[`docs/SESSION_SECURITY.md`](docs/SESSION_SECURITY.md). Single-service Maven
-commands for clients should include `-am` to build the shared dependency.
-
-Backend operation permissions and their explicit role bundles are documented in
-[`docs/BACKEND_PERMISSIONS.md`](docs/BACKEND_PERMISSIONS.md). Each service owns
-its catalogue; the shared library supplies only immutable claim conversion.
-Auth also uses this converter, so include `-am` when building/testing Auth alone.
-Permissions never replace live membership, resource ownership or sharing checks.
-
-Local operational probes have a separate, credential-independent policy. The
-native launcher requires liveness and readiness, not aggregate diagnostic health.
-See [health/readiness](docs/HEALTH_READINESS.md) for the dependency matrix and
-`node scripts/health-smoke.mjs all` for the packaged-service smoke checks.
-
-Package all executable backend JARs:
-
-```powershell
-.\mvnw.cmd package -DskipTests
-```
-
-In IntelliJ, reload the root Maven project once after opening the repository.
-The Run dropdown then contains one shared configuration for every application,
-plus `Sahha - Infrastructure` and `Sahha - All Services`. Implemented domain
-services use their owned PostgreSQL databases. Audit now has its owned Flyway
-foundation; central ingestion and authorised queries remain Phase 7 work, with
-all business endpoints denied. See [Audit persistence](docs/AUDIT_PERSISTENCE.md).
-
-Default local ports:
-
-| Application | Port |
-| --- | ---: |
-| API Gateway | 8079 |
-| Auth | 8081 |
-| Organisation | 8082 |
-| Patient | 8083 |
-| Scheduling | 8084 |
-| Clinical | 8085 |
-| Communication | 8086 |
-| Notification | 8087 |
-| File | 8088 |
-| Audit | 8089 |
-| Config Server | 8888 |
-| Discovery Server | 8761 |
-
-## Local PostgreSQL
-
-PostgreSQL runs locally on `localhost:5432`. Each stateful service owns a
-separate database and restricted login:
-
-| Service | Database | Login |
-| --- | --- | --- |
-| Auth | `sahha_auth` | `sahha_auth_app` |
-| Organisation | `sahha_organisation` | `sahha_organisation_app` |
-| Patient | `sahha_patient` | `sahha_patient_app` |
-| Scheduling | `sahha_scheduling` | `sahha_scheduling_app` |
-| Clinical | `sahha_clinical` | `sahha_clinical_app` |
-| Communication | `sahha_communication` | `sahha_communication_app` |
-| Notification | `sahha_notification` | `sahha_notification_app` |
-| File | `sahha_file` | `sahha_file_app` |
-| Audit | `sahha_audit` | `sahha_audit_app` |
-
-Generated development connection settings are in the gitignored
-`.env.database.local`. Auth also has a separately credentialed
-`sahha_auth_test` database that its guarded integration tests may clean and
-rebuild. Organisation owns Flyway version 2 in `sahha_organisation`; its tests
-use the separate `organisation_test` schema and never clean the development
-schema. Patient, Scheduling, Clinical, Communication, Notification and File also
-own Flyway-backed slices and isolated test schemas. Audit V1 uses its own database
-and guarded `audit_test` schema, with no central ingestion/API yet. See the living
-plan for current migration/validation evidence.
-
-Run the migrated frontend:
+In another terminal:
 
 ```powershell
 Set-Location frontend
@@ -199,16 +161,50 @@ npm ci
 npm run dev
 ```
 
-Validate the frontend:
+The local API Gateway listens on `8079`. Stop launcher-owned backend processes
+with `node scripts/sahha.mjs stop`. The runner does not install infrastructure
+or reset databases.
+
+For an isolated, repeatable demonstration environment, follow the
+[synthetic bootstrap guide](docs/SYNTHETIC_BOOTSTRAP.md).
+
+## Validation
+
+With the documented local test prerequisites configured:
 
 ```powershell
-npm run typecheck
-npm test
-npm run build
+node scripts/sahha.mjs test tools
+node scripts/sahha.mjs test backend
+node scripts/sahha.mjs test frontend
+node scripts/sahha.mjs build frontend
 ```
 
-Native service automation, isolated database generation/reset, identity/staff,
-patient/appointment, clinical, file and messaging seeds and dependency probes are
-available now. Native prerequisite installation is explicit/manual; full demo and
-clean-machine verification remain tracked work. Azure
-deployment does not require adding Docker to this project.
+Backend tests cover domain rules, persistence and access boundaries. Frontend
+tests cover the integrated role workflows and error states. The cloud
+walkthrough records real browser interactions against the deployed Gateway.
+
+## Repository map
+
+| Path | Responsibility |
+| --- | --- |
+| `frontend/` | Browser application |
+| `api-gateway/`, `auth-service/` | Public API entry point and identity |
+| `organisation-service/`, `patient-service/` | Clinic structure and administrative patient registry |
+| `scheduling-service/`, `clinical-service/` | Appointments and clinical records |
+| `communication-service/`, `notification-service/` | Messaging, referrals, sharing and notifications |
+| `file-service/`, `audit-service/` | Private files and audit persistence foundation |
+| `discovery-server/`, `config-server/` | Service discovery and configuration |
+| `session-security/` | Shared session and permission support |
+| `scripts/` | Native development, validation and release tooling |
+| `docs/` | Architecture decisions, setup guides and demonstrations |
+
+## Further reading
+
+- [Project context and V1 scope](docs/PROJECT_CONTEXT.md)
+- [Backend package structure](docs/BACKEND_PACKAGE_STRUCTURE.md)
+- [Gateway authentication flow](docs/GATEWAY_AUTH_GUIDE.md)
+- [Frontend authentication guide](docs/FRONTEND_AUTH_GUIDE.md)
+- [Demonstration videos](docs/DEMO.md)
+- [Implementation and verification history](docs/INTERNSHIP_PLAN.md)
+
+Developed by **[Mohamed Fares Jebali](https://github.com/faresjebal)**.
